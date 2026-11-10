@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mBot Coding Simulator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@600;700;800&display=swap">
+<style>
+/* Layout: one-screen coding bench. Blocks and workspace fill the left, the robot arena and its instruments sit in a fixed right column. */
+:root {
+  --bg: #e9f2fb; --panel: #ffffff; --panel-2: #f3f8fd; --ink: #17264d; --muted: #586a8c; --line: #cfdded;
+  --brand: #1487e0; --brand-deep: #0d5ea8; --on-brand: #ffffff; --sun: #ffbf00; --on-sun: #3a2c00;
+  --go: #1a9c55; --halt: #dc3f45; --warn: #c97a00; --ws: #f7fafd; --shadow: 0 2px 0 rgba(23, 38, 77, .08);
+  --display: "Baloo 2", "Trebuchet MS", "Segoe UI", sans-serif;
+  --body: "Nunito", "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1930; --panel: #172641; --panel-2: #1d2f50; --ink: #eaf1fb; --muted: #a3b5d3; --line: #2c4066;
+    --brand: #4aa9f5; --brand-deep: #123e6e; --on-brand: #ffffff; --sun: #ffc61a; --on-sun: #3a2c00;
+    --go: #35c076; --halt: #f0656a; --warn: #f0a93a; --ws: #121f38; --shadow: 0 2px 0 rgba(0, 0, 0, .3); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1930; --panel: #172641; --panel-2: #1d2f50; --ink: #eaf1fb; --muted: #a3b5d3; --line: #2c4066;
+  --brand: #4aa9f5; --brand-deep: #123e6e; --on-brand: #ffffff; --sun: #ffc61a; --on-sun: #3a2c00;
+  --go: #35c076; --halt: #f0656a; --warn: #f0a93a; --ws: #121f38; --shadow: 0 2px 0 rgba(0, 0, 0, .3); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; display: flex; flex-direction: column; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
+
+.top { background: var(--brand-deep); color: var(--on-brand); }
+.top-in { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding-block: 8px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.brand { display: flex; align-items: center; gap: 10px; margin-right: auto; }
+.brand svg { width: 38px; height: 38px; flex: none; }
+.brand h1 { font-family: var(--display); font-size: 1.45rem; line-height: 1; margin: 0; font-weight: 700; }
+.brand small { display: block; font-size: .74rem; opacity: .85; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.pill { background: rgba(255, 255, 255, .14); border: 0; color: var(--on-brand); border-radius: 999px; padding: 7px 14px; font-weight: 800; display: inline-flex; gap: 6px; align-items: center; }
+button.pill:hover { background: rgba(255, 255, 255, .26); }
+.pill.sun { background: var(--sun); color: var(--on-sun); }
+button.pill.sun:hover { background: var(--sun); filter: brightness(1.08); }
+.pts { font-variant-numeric: tabular-nums; }
+
+.app { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 450px); gap: 12px; padding-block: 12px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.code { position: relative; min-width: 0; min-height: 0; border-radius: 14px; overflow: hidden; border: 2px solid var(--line); background: var(--ws); }
+#blockly { position: absolute; inset: 0 0 42px 0; }
+.wsbar { position: absolute; left: 0; right: 0; bottom: 0; height: 42px; display: flex; align-items: center; gap: 6px; padding-inline: 8px; background: var(--panel); border-top: 2px solid var(--line); overflow: hidden; }
+.wsbar .tip { color: var(--muted); font-size: .82rem; font-weight: 700; margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.loadErr { position: absolute; inset: 0; display: grid; place-content: center; padding: 24px; text-align: center; gap: 8px; }
+.sim { min-width: 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.card { background: var(--panel); border: 2px solid var(--line); border-radius: 14px; padding: 10px 12px; box-shadow: var(--shadow); }
+
+.mission-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.mission h2 { font-family: var(--display); font-size: 1.2rem; margin: 0; line-height: 1.15; }
+.tag { font-size: .7rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; border-radius: 6px; padding: 2px 7px; background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
+.tag.Beginner { color: var(--go); } .tag.Intermediate { color: var(--warn); } .tag.Advanced { color: var(--halt); }
+.mission p { margin: 4px 0 0; color: var(--muted); }
+.mission .goal { color: var(--ink); font-weight: 700; }
+.mission-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.coach { margin-top: 8px; border-radius: 10px; padding: 8px 10px; background: var(--panel-2); border: 1px dashed var(--line); font-weight: 700; }
+.coach.bad { border-color: var(--halt); } .coach.good { border-color: var(--go); }
+
+.arena { padding: 8px; }
+.arena canvas { display: block; width: 100%; aspect-ratio: 4 / 3; max-width: 100%; border-radius: 8px; touch-action: none; background: #fff; }
+.controls { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
+.btn { border: 2px solid var(--line); background: var(--panel-2); border-radius: 10px; padding: 7px 12px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { border-color: var(--brand); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.run { background: var(--go); border-color: var(--go); color: #fff; padding-inline: 18px; }
+.btn.stop { background: var(--halt); border-color: var(--halt); color: #fff; }
+.btn.small { padding: 4px 9px; font-size: .85rem; }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+.speed { display: flex; align-items: center; gap: 6px; margin-left: auto; font-weight: 800; color: var(--muted); font-size: .85rem; }
+.speed input { width: 90px; }
+.speed output { font-variant-numeric: tabular-nums; min-width: 2.6em; color: var(--ink); }
+
+.sensors { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; }
+.gauge { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 6px 9px; min-width: 0; }
+.gauge b { display: block; font-size: .68rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.gauge .v { font-family: var(--display); font-size: 1.25rem; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.gauge .v small { font-family: var(--body); font-size: .75rem; color: var(--muted); font-weight: 700; }
+.eye { display: inline-block; width: 18px; height: 18px; border-radius: 5px; border: 2px solid var(--muted); background: #fff; vertical-align: -3px; }
+.eye.black { background: #111; }
+.led { display: inline-block; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--muted); background: transparent; vertical-align: -3px; }
+.gauge input[type=range] { width: 100%; }
+.hold { width: 100%; border-radius: 999px; border: 2px solid var(--line); background: var(--panel); font-weight: 800; padding: 5px; touch-action: none; user-select: none; }
+.hold.down { background: var(--sun); color: var(--on-sun); border-color: var(--sun); }
+
+.envtools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.envtools select { border: 2px solid var(--line); border-radius: 10px; padding: 6px 8px; background: var(--panel-2); font-weight: 800; max-width: 100%; }
+.envtools .note { color: var(--muted); font-size: .85rem; flex-basis: 100%; }
+
+.modal { position: fixed; inset: 0; background: rgba(8, 16, 34, .6); display: grid; place-items: center; z-index: 200;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.sheet { background: var(--panel); color: var(--ink); border-radius: 18px; width: min(760px, 100%); max-height: 100%; overflow: auto; padding: 18px 20px; border: 2px solid var(--line); }
+.sheet h2 { font-family: var(--display); font-size: 1.6rem; margin: 0; text-wrap: balance; }
+.sheet-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.sheet-head .x { margin-left: auto; }
+.week { border-top: 2px solid var(--line); padding-block: 10px; }
+.week h3 { font-family: var(--display); margin: 0 0 6px; font-size: 1.15rem; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.week h3 span { font-family: var(--body); font-size: .8rem; color: var(--muted); font-weight: 700; }
+.chs { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.ch { text-align: left; border: 2px solid var(--line); background: var(--panel-2); border-radius: 12px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.ch:hover { border-color: var(--brand); }
+.ch strong { font-family: var(--display); font-size: 1.05rem; line-height: 1.1; }
+.stars { color: var(--sun); letter-spacing: 2px; font-size: 1rem; }
+.stars i { color: var(--line); font-style: normal; }
+.badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.badge { border: 2px solid var(--line); border-radius: 12px; padding: 10px; text-align: center; background: var(--panel-2); }
+.badge.off { opacity: .45; }
+.badge .ic { font-size: 1.8rem; line-height: 1; }
+.badge strong { display: block; font-family: var(--display); }
+.badge small { color: var(--muted); }
+.quiz-q { font-weight: 800; margin: 12px 0 6px; }
+.opts { display: grid; gap: 6px; }
+.opt { text-align: left; border: 2px solid var(--line); border-radius: 10px; background: var(--panel-2); padding: 8px 10px; font-weight: 700; }
+.opt.right { border-color: var(--go); } .opt.wrong { border-color: var(--halt); }
+.win { text-align: center; }
+.win .stars { font-size: 2.6rem; display: block; animation: pop .5s ease-out; }
+.win p { color: var(--muted); }
+textarea.share { width: 100%; height: 130px; font-family: var(--mono); font-size: .75rem; border: 2px solid var(--line); border-radius: 10px; background: var(--panel-2); padding: 8px; }
+.field { display: grid; gap: 4px; margin-block: 8px; font-weight: 800; }
+.field input { border: 2px solid var(--line); border-radius: 10px; padding: 7px 10px; background: var(--panel-2); font-weight: 700; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+@keyframes pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .win .stars { animation: none; } }
+
+@media (max-width: 900px) {
+  html, body { height: auto; }
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .code { height: 68vh; min-height: 380px; }
+  .sim { overflow: visible; }
+  .brand h1 { font-size: 1.2rem; }
+}
+/* Blockly chrome */
+.blocklyToolboxDiv { border-right: 2px solid var(--line); }
+.blocklyTreeLabel { font-family: var(--body) !important; font-weight: 800 !important; }
+.blocklyTreeRow { height: 34px !important; line-height: 34px !important; margin-bottom: 2px !important; }
+
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="brand">
+    <svg viewBox="0 0 40 40" aria-hidden="true"><rect x="5" y="9" width="30" height="22" rx="7" fill="#35a7ff"/><rect x="1" y="14" width="5" height="13" rx="2" fill="#0b2545"/><rect x="34" y="14" width="5" height="13" rx="2" fill="#0b2545"/><circle cx="14" cy="19" r="5" fill="#fff"/><circle cx="26" cy="19" r="5" fill="#fff"/><circle cx="14" cy="19" r="2.2" fill="#0b2545"/><circle cx="26" cy="19" r="2.2" fill="#0b2545"/><rect x="15" y="26" width="10" height="2.4" rx="1.2" fill="#0b2545"/></svg>
+    <div><h1>mBot Coding Simulator</h1><small>Grade 7 Robotics Lab</small></div>
+  </div>
+  <button class="pill sun" id="btnWeeks" type="button">Challenges</button>
+  <button class="pill" id="btnFree" type="button">Free play</button>
+  <button class="pill" id="btnBadges" type="button">Badges</button>
+  <button class="pill" id="btnShare" type="button">Save / Share</button>
+  <span class="pill pts" title="Your points">&#9733; <span id="pts">0</span> pts</span>
+</div></header>
+
+<main class="app">
+  <section class="code" aria-label="Coding workspace">
+    <div id="blockly"></div>
+    <div class="wsbar"><button class="btn small" id="undo" type="button" title="Undo">Undo</button><button class="btn small" id="redo" type="button" title="Redo">Redo</button><button class="btn small" id="zOut" type="button" aria-label="Zoom out">&minus;</button><button class="btn small" id="zIn" type="button" aria-label="Zoom in">+</button><span class="tip">Drag a block back to the left to delete it</span></div>
+    <div class="loadErr" id="loadErr" hidden>
+      <h2>The coding blocks could not load</h2>
+      <p>The block library is downloaded from the internet. Check your connection, then reload this page.</p>
+    </div>
+  </section>
+
+  <aside class="sim" aria-label="Robot simulation">
+    <div class="card mission" id="mission">
+      <div class="mission-head"><h2 id="mTitle">Free play</h2><span class="tag" id="mTag" hidden></span></div>
+      <p id="mDesc"></p>
+      <p class="goal" id="mGoal"></p>
+      <div class="mission-actions">
+        <button class="btn small" id="btnHint" type="button">Show a hint</button>
+        <button class="btn small" id="btnNext" type="button" hidden>Next challenge</button>
+      </div>
+      <div class="coach" id="coach" role="status" hidden></div>
+    </div>
+
+    <div class="card arena">
+      <canvas id="cv" width="800" height="600" aria-label="Top view of the virtual mBot in its arena"></canvas>
+      <div class="controls">
+        <button class="btn run" id="btnRun" type="button">&#9654; Run</button>
+        <button class="btn" id="btnPause" type="button" disabled>&#10074;&#10074; Pause</button>
+        <button class="btn" id="btnStep" type="button">Step</button>
+        <button class="btn stop" id="btnStop" type="button" disabled>&#9632; Stop</button>
+        <button class="btn" id="btnReset" type="button">&#8634; Reset</button>
+        <label class="speed" for="speed">Speed <input type="range" id="speed" min="0" max="5" step="1" value="2"><output id="speedOut" for="speed">1x</output></label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="sensors">
+        <div class="gauge"><b>Ultrasonic</b><div class="v"><span id="gDist">0</span> <small>cm</small></div></div>
+        <div class="gauge"><b>Line follower</b><div class="v"><span class="eye" id="gL"></span> <span class="eye" id="gR"></span> <small>value</small> <span id="gLine">3</span></div></div>
+        <div class="gauge"><b>Motors L / R</b><div class="v"><span id="gMot">0 / 0</span> <small>%</small></div></div>
+        <div class="gauge"><b>LEDs and buzzer</b><div class="v"><span class="led" id="gLed1"></span> <span class="led" id="gLed2"></span> <small id="gTone">quiet</small></div></div>
+        <div class="gauge"><b>Light sensor <span id="gLight">600</span></b><input type="range" id="light" min="0" max="1023" value="600" aria-label="Light level on the light sensor"></div>
+        <div class="gauge"><b>On-board button</b><button class="hold" id="hold" type="button">Hold to press</button></div>
+        <div class="gauge"><b>Timer</b><div class="v"><span id="gTime">0.0</span> <small>s</small></div></div>
+        <div class="gauge"><b>Bumps</b><div class="v" id="gBump">0</div></div>
+      </div>
+    </div>
+
+    <div class="card" id="envCard">
+      <div class="envtools">
+        <select id="env" aria-label="Environment">
+          <option value="open">Open Space</option><option value="obstacles">Obstacle Course</option>
+          <option value="line">Line-Following Track</option><option value="maze">Maze Challenge</option>
+        </select>
+        <select id="track" aria-label="Track shape" hidden>
+          <option value="oval">Oval track</option><option value="rounded">Rounded square track</option><option value="wave">Wavy line</option>
+        </select>
+        <button class="btn small" id="btnAddBox" type="button" hidden>Add obstacle</button>
+        <button class="btn small" id="btnDelBox" type="button" hidden>Remove selected</button>
+        <button class="btn small" id="btnRot" type="button">Rotate robot</button>
+        <label class="btn small" for="trail"><input type="checkbox" id="trail" checked> Draw path</label>
+        <label class="btn small" for="sound"><input type="checkbox" id="sound" checked> Sound</label>
+        <span class="note" id="envNote">Drag the robot to choose where it starts.</span>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<div class="modal" id="modal" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
+<input type="file" id="file" accept=".json,application/json" hidden>
+
+<script src="https://unpkg.com/blockly@11.1.1/blockly.min.js"></script>
+<script>
+/* mBot Coding Simulator - simulation engine (physics, sensors, block interpreter, challenges).
+   Runs in the browser and in Node (for tests). No DOM access in this file. */
+(function (root) {
+  'use strict';
+
+  var ARENA = { w: 200, h: 150 };          // centimetres
+  var DT = 1 / 60;                          // one simulation tick, seconds
+  var KV = 0.36;                            // cm per second for each 1% of power (50% = 18 cm/s)
+  var WHEEL_BASE = 2 * 18 / Math.PI;        // chosen so 50% power spins exactly 180 degrees per second
+  var BODY_R = 6.5;                         // collision radius, cm
+  var LINE_W = 3;                           // black tape width, cm
+  var TICK = 0;                             // generator yield value meaning "one tick passes"
+  var STOP_ALL = { stop: true };
+
+  var LED_COLORS = {
+    red: '#ff3b30', orange: '#ff9500', yellow: '#ffd60a', green: '#34c759',
+    cyan: '#32d4e6', blue: '#2f7bff', purple: '#af52de', white: '#ffffff'
+  };
+  var NOTES = { C4: 262, D4: 294, E4: 330, F4: 349, G4: 392, A4: 440, B4: 494, C5: 523, D5: 587, E5: 659 };
+
+  /* ---------- geometry ---------- */
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function distPointSeg(px, py, ax, ay, bx, by) {
+    var dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    var t = l2 ? clamp(((px - ax) * dx + (py - ay) * dy) / l2, 0, 1) : 0;
+    var x = ax + t * dx - px, y = ay + t * dy - py;
+    return Math.sqrt(x * x + y * y);
+  }
+  function circleHitsRect(cx, cy, r, o) {
+    var nx = clamp(cx, o.x, o.x + o.w), ny = clamp(cy, o.y, o.y + o.h);
+    var dx = cx - nx, dy = cy - ny;
+    return dx * dx + dy * dy < r * r;
+  }
+  function rayRect(ox, oy, dx, dy, o) {
+    var tmin = -Infinity, tmax = Infinity, t1, t2;
+    if (Math.abs(dx) < 1e-9) { if (ox < o.x || ox > o.x + o.w) return Infinity; }
+    else { t1 = (o.x - ox) / dx; t2 = (o.x + o.w - ox) / dx; tmin = Math.max(tmin, Math.min(t1, t2)); tmax = Math.min(tmax, Math.max(t1, t2)); }
+    if (Math.abs(dy) < 1e-9) { if (oy < o.y || oy > o.y + o.h) return Infinity; }
+    else { t1 = (o.y - oy) / dy; t2 = (o.y + o.h - oy) / dy; tmin = Math.max(tmin, Math.min(t1, t2)); tmax = Math.min(tmax, Math.max(t1, t2)); }
+    if (tmax < 0 || tmin > tmax) return Infinity;
+    return tmin >= 0 ? tmin : 0;
+  }
+  function rayArena(ox, oy, dx, dy) {
+    var t = Infinity;
+    if (dx > 1e-9) t = Math.min(t, (ARENA.w - ox) / dx); else if (dx < -1e-9) t = Math.min(t, (0 - ox) / dx);
+    if (dy > 1e-9) t = Math.min(t, (ARENA.h - oy) / dy); else if (dy < -1e-9) t = Math.min(t, (0 - oy) / dy);
+    return Math.max(0, t);
+  }
+
+  /* ---------- tracks ---------- */
+  function ovalTrack(cx, cy, rx, ry, n) {
+    var pts = []; n = n || 120;
+    for (var i = 0; i < n; i++) { var a = i / n * Math.PI * 2; pts.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]); }
+    return { pts: pts, closed: true };
+  }
+  function roundRectTrack(cx, cy, rx, ry, n) {
+    var pts = []; n = n || 160;
+    for (var i = 0; i < n; i++) {
+      var a = i / n * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+      pts.push([cx + rx * Math.sign(c) * Math.pow(Math.abs(c), 0.5), cy + ry * Math.sign(s) * Math.pow(Math.abs(s), 0.5)]);
+    }
+    return { pts: pts, closed: true };
+  }
+  function waveTrack() {
+    var pts = [];
+    for (var x = 15; x <= 185; x += 2) pts.push([x, 75 + 32 * Math.sin((x - 15) / 170 * Math.PI * 2)]);
+    return { pts: pts, closed: false };
+  }
+  var TRACKS = {
+    oval: function () { return [ovalTrack(100, 75, 70, 45)]; },
+    rounded: function () { return [roundRectTrack(100, 75, 72, 48)]; },
+    wave: function () { return [waveTrack()]; }
+  };
+
+  /* ---------- world ---------- */
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+  var ENVS = {
+    open: { name: 'Open Space', start: { x: 100, y: 120, th: -90 } },
+    obstacles: { name: 'Obstacle Course', start: { x: 100, y: 128, th: -90 }, editable: true,
+      obstacles: [{ x: 82, y: 58, w: 36, h: 14 }, { x: 28, y: 30, w: 20, h: 20 }, { x: 150, y: 86, w: 22, h: 18 }] },
+    line: { name: 'Line-Following Track', start: { x: 100, y: 120, th: 0 }, track: 'oval' },
+    maze: { name: 'Maze Challenge', start: { x: 30, y: 125, th: -90 },
+      walls: [{ x: 60, y: 40, w: 4, h: 110 }, { x: 130, y: 0, w: 4, h: 110 }],
+      zones: [{ id: 'finish', x: 168, y: 28, r: 13, label: 'FINISH', kind: 'finish' }] }
+  };
+  var TRACK_STARTS = { oval: { x: 100, y: 120, th: 0 }, rounded: { x: 100, y: 123, th: 0 }, wave: { x: 15, y: 75, th: -50 } };
+
+  function makeWorld(spec) {
+    spec = spec || ENVS.open;
+    var w = {
+      spec: spec,
+      obstacles: clone(spec.obstacles || []),
+      walls: clone(spec.walls || []),
+      zones: clone(spec.zones || []),
+      lines: spec.track ? TRACKS[spec.track]() : (spec.lines ? clone(spec.lines) : []),
+      light: 600, button: false, time: 0, timer0: 0
+    };
+    w.start = clone(spec.track && !spec.keepStart ? (TRACK_STARTS[spec.track] || spec.start) : spec.start);
+    w.robot = newRobot(w.start);
+    return w;
+  }
+  function newRobot(s) {
+    return { x: s.x, y: s.y, th: s.th * Math.PI / 180, pl: 0, pr: 0, leds: [null, null], tone: null,
+      bumps: 0, bumping: false, odo: 0, still: 0, trail: [[s.x, s.y]] };
+  }
+  function resetRobot(w) { w.robot = newRobot(w.start); w.time = 0; w.timer0 = 0; }
+
+  function blocked(w, x, y) {
+    if (x < BODY_R || y < BODY_R || x > ARENA.w - BODY_R || y > ARENA.h - BODY_R) return true;
+    var i;
+    for (i = 0; i < w.obstacles.length; i++) if (circleHitsRect(x, y, BODY_R, w.obstacles[i])) return true;
+    for (i = 0; i < w.walls.length; i++) if (circleHitsRect(x, y, BODY_R, w.walls[i])) return true;
+    return false;
+  }
+
+  function physics(w) {
+    var r = w.robot;
+    var vl = r.pl * KV, vr = r.pr * KV;
+    var v = (vl + vr) / 2, om = (vl - vr) / WHEEL_BASE;
+    r.th += om * DT;
+    var nx = r.x + Math.cos(r.th) * v * DT, ny = r.y + Math.sin(r.th) * v * DT;
+    var moved = false;
+    if (v !== 0) {
+      if (!blocked(w, nx, ny)) {
+        r.odo += Math.abs(v) * DT; r.x = nx; r.y = ny; moved = true;
+        if (r.bumping) r.bumping = false;
+      } else if (!r.bumping) { r.bumping = true; r.bumps++; }
+    }
+    if (moved || om !== 0) r.still = 0; else r.still += DT;
+    var last = r.trail[r.trail.length - 1];
+    if (Math.abs(last[0] - r.x) + Math.abs(last[1] - r.y) > 1.5) { r.trail.push([r.x, r.y]); if (r.trail.length > 6000) r.trail.shift(); }
+    w.time += DT;
+  }
+
+  /* ---------- sensors ---------- */
+  var FAN = [-0.26, -0.17, -0.085, 0, 0.085, 0.17, 0.26];
+  function ultrasonic(w) {
+    var r = w.robot, ox = r.x + Math.cos(r.th) * 7, oy = r.y + Math.sin(r.th) * 7, best = Infinity;
+    for (var k = 0; k < FAN.length; k++) {
+      var a = r.th + FAN[k], dx = Math.cos(a), dy = Math.sin(a), d = rayArena(ox, oy, dx, dy), i;
+      for (i = 0; i < w.obstacles.length; i++) d = Math.min(d, rayRect(ox, oy, dx, dy, w.obstacles[i]));
+      for (i = 0; i < w.walls.length; i++) d = Math.min(d, rayRect(ox, oy, dx, dy, w.walls[i]));
+      if (d < best) best = d;
+    }
+    return Math.round(clamp(best, 0, 400) * 10) / 10;
+  }
+  function onLine(w, x, y) {
+    for (var l = 0; l < w.lines.length; l++) {
+      var p = w.lines[l].pts, n = p.length, m = w.lines[l].closed ? n : n - 1;
+      for (var i = 0; i < m; i++) {
+        var a = p[i], b = p[(i + 1) % n];
+        if (distPointSeg(x, y, a[0], a[1], b[0], b[1]) <= LINE_W / 2) return true;
+      }
+    }
+    return false;
+  }
+  function linePoints(r) {
+    var fx = r.x + Math.cos(r.th) * 6.5, fy = r.y + Math.sin(r.th) * 6.5;
+    var lx = Math.sin(r.th), ly = -Math.cos(r.th);     // unit vector to the robot's left
+    return { l: [fx + lx * 1.0, fy + ly * 1.0], r: [fx - lx * 1.0, fy - ly * 1.0] };
+  }
+  function lineSensors(w) {
+    var p = linePoints(w.robot);
+    var L = onLine(w, p.l[0], p.l[1]), R = onLine(w, p.r[0], p.r[1]);
+    return { left: L, right: R, value: (L ? 0 : 2) + (R ? 0 : 1) };
+  }
+
+  /* ---------- program helpers ---------- */
+  function topBlocks(program) { return (program && program.blocks && program.blocks.blocks) || []; }
+  function inputBlock(block, name) {
+    var i = block.inputs && block.inputs[name];
+    return i ? (i.block || i.shadow || null) : null;
+  }
+  function walk(block, fn, realOnly) {
+    while (block) {
+      fn(block);
+      if (block.inputs) for (var k in block.inputs) {
+        var i = block.inputs[k];
+        if (i.block) walk(i.block, fn, realOnly); else if (i.shadow && !realOnly) walk(i.shadow, fn, realOnly);
+      }
+      block = block.next && block.next.block;
+    }
+  }
+  function isHat(b) { return b.type === 'ev_flag' || b.type === 'ev_button'; }
+  function usedTypes(program) {
+    var set = {};
+    topBlocks(program).forEach(function (t) { if (isHat(t)) walk(t, function (b) { set[b.type] = true; }, true); });
+    return set;
+  }
+  function countBlocks(program) {
+    var n = 0;
+    topBlocks(program).forEach(function (t) { if (isHat(t)) walk(t, function (b) { if (b.type !== 'num') n++; }, true); });
+    return n;
+  }
+  function diagnose(program) {
+    var tops = topBlocks(program);
+    if (!tops.length) return { fatal: true, msg: 'Your workspace is empty! Drag the "when ▶ clicked" block from Events to begin.' };
+    var hats = tops.filter(isHat);
+    if (!hats.length) return { fatal: true, msg: 'Your robot does not know when to start! Add the "when ▶ clicked" block from Events and snap your blocks under it.' };
+    if (!hats.some(function (h) { return h.next && h.next.block; }))
+      return { fatal: true, msg: 'Your start block is alone! Snap some blocks underneath it so the robot has something to do.' };
+    if (tops.length > hats.length) return { fatal: false, msg: 'Some blocks are not connected to a start block, so the robot will ignore them.' };
+    return null;
+  }
+
+  /* ---------- interpreter ---------- */
+  function Runner(world, program) {
+    this.w = world; this.threads = []; this.btnHats = []; this.stepMode = false;
+    this.cur = null; this.newBlock = false; this.prevBtn = false; this.killed = false;
+    var self = this;
+    topBlocks(program).forEach(function (t) {
+      if (t.type === 'ev_flag') self.threads.push({ gen: self.chain(t.next && t.next.block) });
+      else if (t.type === 'ev_button') self.btnHats.push({ block: t, thread: null });
+    });
+  }
+  Runner.prototype.num = function (block, name) {
+    var b = inputBlock(block, name); if (!b) return 0;
+    var v = Number(this.val(b)); return isFinite(v) ? v : 0;
+  };
+  Runner.prototype.bool = function (block, name) { var b = inputBlock(block, name); return b ? !!this.val(b) : false; };
+  Runner.prototype.val = function (b) {
+    var w = this.w, f = b.fields || {}, a, c;
+    switch (b.type) {
+      case 'num': return Number(f.NUM) || 0;
+      case 'sn_ultra': return ultrasonic(w);
+      case 'sn_obstacle': return ultrasonic(w) < this.num(b, 'CM');
+      case 'sn_line': return lineSensors(w).value;
+      case 'sn_line_detect':
+        var s = lineSensors(w), want = f.COLOR !== 'white';
+        if (f.SIDE === 'left') return s.left === want;
+        if (f.SIDE === 'right') return s.right === want;
+        if (f.SIDE === 'none') return s.left !== want && s.right !== want;
+        return s.left === want && s.right === want;
+      case 'sn_light': return Math.round(w.light);
+      case 'sn_button': return f.STATE === 'released' ? !w.button : !!w.button;
+      case 'sn_timer': return Math.round((w.time - w.timer0) * 100) / 100;
+      case 'op_add': return this.num(b, 'A') + this.num(b, 'B');
+      case 'op_sub': return this.num(b, 'A') - this.num(b, 'B');
+      case 'op_mul': return this.num(b, 'A') * this.num(b, 'B');
+      case 'op_div': c = this.num(b, 'B'); return c === 0 ? 0 : this.num(b, 'A') / c;
+      case 'op_random': a = this.num(b, 'A'); c = this.num(b, 'B'); if (a > c) { var t = a; a = c; c = t; }
+        return Math.floor(a + Math.random() * (c - a + 1));
+      case 'op_gt': return this.num(b, 'A') > this.num(b, 'B');
+      case 'op_lt': return this.num(b, 'A') < this.num(b, 'B');
+      case 'op_eq': return Math.abs(this.num(b, 'A') - this.num(b, 'B')) < 1e-9;
+      case 'op_and': return this.bool(b, 'A') && this.bool(b, 'B');
+      case 'op_or': return this.bool(b, 'A') || this.bool(b, 'B');
+      case 'op_not': return !this.bool(b, 'A');
+    }
+    return 0;
+  };
+  Runner.prototype.setLed = function (pos, color) {
+    var l = this.w.robot.leds;
+    if (pos !== 'right') l[0] = color;
+    if (pos !== 'left') l[1] = color;
+  };
+  Runner.prototype.wait = function* (secs) {
+    var n = Math.max(0, Math.round(secs * 60));
+    for (var i = 0; i < n; i++) yield TICK;
+  };
+  Runner.prototype.chain = function* (block) {
+    while (block) { yield* this.exec(block); block = block.next && block.next.block; }
+  };
+  Runner.prototype.body = function (block, name) {
+    var i = block.inputs && block.inputs[name];
+    return this.chain(i && i.block);
+  };
+  Runner.prototype.exec = function* (b) {
+    yield b.id || b.type;                       // marker: this block is starting
+    var r = this.w.robot, f = b.fields || {}, p, i, n;
+    switch (b.type) {
+      case 'mv_fwd_t': case 'mv_back_t': case 'mv_left_t': case 'mv_right_t':
+        p = clamp(this.num(b, 'POWER'), -100, 100);
+        if (b.type === 'mv_fwd_t') { r.pl = p; r.pr = p; }
+        else if (b.type === 'mv_back_t') { r.pl = -p; r.pr = -p; }
+        else if (b.type === 'mv_left_t') { r.pl = -p; r.pr = p; }
+        else { r.pl = p; r.pr = -p; }
+        yield* this.wait(this.num(b, 'SECS'));
+        r.pl = 0; r.pr = 0; break;
+      case 'mv_dir':
+        p = clamp(this.num(b, 'POWER'), -100, 100);
+        if (f.DIR === 'backward') { r.pl = -p; r.pr = -p; }
+        else if (f.DIR === 'left') { r.pl = -p; r.pr = p; }
+        else if (f.DIR === 'right') { r.pl = p; r.pr = -p; }
+        else { r.pl = p; r.pr = p; }
+        break;
+      case 'mv_wheels': r.pl = clamp(this.num(b, 'L'), -100, 100); r.pr = clamp(this.num(b, 'R'), -100, 100); break;
+      case 'mv_stop': r.pl = 0; r.pr = 0; break;
+      case 'led_timed': this.setLed(f.POS, f.COLOR); yield* this.wait(this.num(b, 'SECS')); this.setLed(f.POS, null); break;
+      case 'led_set': this.setLed(f.POS, f.COLOR); break;
+      case 'led_off': this.setLed(f.POS, null); break;
+      case 'note': r.tone = NOTES[f.NOTE] || 440; yield* this.wait(this.num(b, 'BEATS')); r.tone = null; break;
+      case 'tone': r.tone = clamp(this.num(b, 'FREQ'), 50, 5000); yield* this.wait(this.num(b, 'SECS')); r.tone = null; break;
+      case 'sn_reset_timer': this.w.timer0 = this.w.time; break;
+      case 'c_wait': yield* this.wait(this.num(b, 'SECS')); break;
+      case 'c_repeat':
+        n = Math.round(this.num(b, 'TIMES'));
+        for (i = 0; i < n; i++) { yield* this.body(b, 'DO'); yield TICK; }
+        break;
+      case 'c_forever': while (true) { yield* this.body(b, 'DO'); yield TICK; }
+      case 'c_if': if (this.bool(b, 'COND')) yield* this.body(b, 'DO'); break;
+      case 'c_ifelse': if (this.bool(b, 'COND')) yield* this.body(b, 'DO'); else yield* this.body(b, 'ELSE'); break;
+      case 'c_wait_until': while (!this.bool(b, 'COND')) yield TICK; break;
+      case 'c_repeat_until': while (!this.bool(b, 'COND')) { yield* this.body(b, 'DO'); yield TICK; } break;
+      case 'c_stop': throw STOP_ALL;
+    }
+  };
+  Runner.prototype.advance = function () {
+    var self = this; this.newBlock = false;
+    var btn = !!this.w.button;
+    this.btnHats.forEach(function (h) {
+      var want = (h.block.fields && h.block.fields.STATE) === 'released' ? (!btn && self.prevBtn) : (btn && !self.prevBtn);
+      if (want && !h.thread) { h.thread = { gen: self.chain(h.block.next && h.block.next.block), hat: h }; self.threads.push(h.thread); }
+    });
+    this.prevBtn = btn;
+    var list = this.threads.slice();
+    for (var t = 0; t < list.length; t++) {
+      var th = list[t], guard = 0;
+      while (true) {
+        var res;
+        try { res = th.gen.next(); }
+        catch (e) { if (e === STOP_ALL) { this.threads = []; this.btnHats = []; this.killed = true; return; } throw e; }
+        if (res.done) { var ix = this.threads.indexOf(th); if (ix >= 0) this.threads.splice(ix, 1); if (th.hat) th.hat.thread = null; break; }
+        if (res.value === TICK) break;
+        this.cur = res.value; this.newBlock = true;
+        if (this.stepMode) break;
+        if (++guard > 20000) break;
+      }
+    }
+  };
+  Runner.prototype.done = function () { return !this.threads.length && !this.btnHats.length; };
+
+  /* ---------- challenges ---------- */
+  function inZone(w, z) { var dx = w.robot.x - z.x, dy = w.robot.y - z.y; return dx * dx + dy * dy <= z.r * z.r; }
+  function zone(w, id) { for (var i = 0; i < w.zones.length; i++) if (w.zones[i].id === id) return w.zones[i]; return null; }
+  function bothLeds(w) { var l = w.robot.leds; return l[0] && l[0] === l[1] ? l[0] : (l[0] || l[1] ? 'mixed' : null); }
+  function near(w, x, y, d) { var dx = w.robot.x - x, dy = w.robot.y - y; return dx * dx + dy * dy <= d * d; }
+  function visitInOrder(st, w, pts, d) {
+    if (st.i === undefined) st.i = 0;
+    if (st.i < pts.length && near(w, pts[st.i][0], pts[st.i][1], d)) st.i++;
+    return st.i;
+  }
+  var NOT_MOVING = 'Your robot is not moving! Check that a movement block from Action is snapped under the start block.';
+
+  var ALL = ['events', 'action', 'show', 'control', 'sensing', 'operators'];
+  var CHALLENGES = [
+    /* Week 2 - Movement */
+    { id: 'w2a', week: 2, level: 'Beginner', title: 'First Drive', par: 2,
+      desc: 'Wake up your mBot and drive it across the floor.',
+      goal: 'Drive forward into the green zone and stop inside it.',
+      hints: ['At power 50% the robot drives about 18 cm every second.', 'Each floor square is 10 cm. Count the squares to the zone, then pick the seconds.'],
+      cats: ['events', 'action'],
+      world: { start: { x: 100, y: 125, th: -90 }, zones: [{ id: 'goal', x: 100, y: 45, r: 12, label: 'GOAL' }] },
+      check: function (st, w) { return inZone(w, zone(w, 'goal')) && w.robot.still > 0.5; },
+      why: function (st, w) {
+        if (w.robot.odo < 1) return NOT_MOVING;
+        if (w.robot.y > 57) return 'So close! Your robot stopped before the zone. Try more seconds.';
+        return 'Your robot drove past the zone. Try fewer seconds.';
+      } },
+    { id: 'w2b', week: 2, level: 'Beginner', title: 'Turn the Corner', par: 4,
+      desc: 'Robots rarely drive in one straight line. Time to turn.',
+      goal: 'Drive forward, turn right, then drive into the green zone.',
+      hints: ['Turning right at power 50% for 0.5 seconds makes a quarter turn (90 degrees).', 'Plan three steps: forward, turn right, forward.'],
+      cats: ['events', 'action'],
+      world: { start: { x: 50, y: 120, th: -90 }, zones: [{ id: 'goal', x: 150, y: 50, r: 13, label: 'GOAL' }] },
+      check: function (st, w) { return inZone(w, zone(w, 'goal')) && w.robot.still > 0.5; },
+      why: function (st, w) {
+        if (w.robot.odo < 1) return NOT_MOVING;
+        return 'Not in the zone yet. Check your turn: 0.5 seconds at power 50% is a quarter turn.';
+      } },
+    { id: 'w2c', week: 2, level: 'Intermediate', title: 'There and Back', par: 3,
+      desc: 'A delivery robot must reach the customer and come home again.',
+      goal: 'Touch the blue zone, then return and stop in the green home zone.',
+      hints: ['Use "move backward" to return without turning.', 'The way back needs the same seconds as the way there.'],
+      cats: ['events', 'action'],
+      world: { start: { x: 100, y: 120, th: -90 }, zones: [{ id: 'a', x: 100, y: 40, r: 12, label: 'DELIVER', kind: 'visit' }, { id: 'home', x: 100, y: 120, r: 12, label: 'HOME' }] },
+      tick: function (st, w) { if (inZone(w, zone(w, 'a'))) st.a = true; },
+      check: function (st, w) { return st.a && inZone(w, zone(w, 'home')) && w.robot.still > 0.5; },
+      why: function (st, w) {
+        if (w.robot.odo < 1) return NOT_MOVING;
+        return st.a ? 'You delivered! Now come back and stop inside the green home zone.' : 'Reach the blue zone first, then come home.';
+      } },
+
+    /* Week 3 - Show */
+    { id: 'w3a', week: 3, level: 'Beginner', title: 'Traffic Light', par: 4,
+      desc: 'Turn your mBot into a traffic light using its two on-board LEDs.',
+      goal: 'Show red, then yellow, then green on all LEDs, one after another.',
+      hints: ['Use "LED all shows color ... for 1 secs" from Show.', 'Order matters: red first, yellow second, green last.'],
+      cats: ['events', 'show', 'control'],
+      world: { start: { x: 100, y: 80, th: -90 } },
+      tick: function (st, w) {
+        var c = bothLeds(w); st.seq = st.seq || [];
+        if (c && c !== 'mixed' && st.seq[st.seq.length - 1] !== c) st.seq.push(c);
+      },
+      check: function (st) {
+        var s = (st.seq || []).join(','); return /red.*yellow.*green/.test(s);
+      },
+      why: function (st) {
+        if (!st.seq || !st.seq.length) return 'The LEDs never turned on. Add an LED block from Show under the start block.';
+        return 'Your lights showed: ' + st.seq.join(', ') + '. The order must be red, yellow, green.';
+      } },
+    { id: 'w3b', week: 3, level: 'Intermediate', title: 'Police Siren', par: 6,
+      desc: 'Lights and sound together make a siren.',
+      goal: 'Flash the LEDs red and blue, and play at least two different notes.',
+      hints: ['The buzzer blocks are in Show: "play note ... for ... beats".', 'A siren jumps between a high note and a low note.'],
+      cats: ['events', 'show', 'control'],
+      world: { start: { x: 100, y: 80, th: -90 } },
+      tick: function (st, w) {
+        st.c = st.c || {}; st.n = st.n || {};
+        var l = w.robot.leds; if (l[0]) st.c[l[0]] = 1; if (l[1]) st.c[l[1]] = 1;
+        if (w.robot.tone) st.n[w.robot.tone] = 1;
+      },
+      check: function (st) { return st.c && st.c.red && st.c.blue && Object.keys(st.n).length >= 2; },
+      why: function (st) {
+        if (!st.c || !(st.c.red && st.c.blue)) return 'A siren needs both red and blue lights. Check your LED colors.';
+        return 'The lights work! Now play two different notes with the buzzer.';
+      } },
+
+    /* Week 4 - Loops */
+    { id: 'w4a', week: 4, level: 'Intermediate', title: 'Draw a Square', par: 4, requires: ['c_repeat'],
+      desc: 'A square is the same two moves done four times. Loops were made for this.',
+      goal: 'Drive through all four corners of the square and return to the start. Use a repeat block.',
+      hints: ['One side: move forward at power 50% for 3 secs. One corner: turn right at power 50% for 0.5 secs.', 'Put both blocks inside "repeat 4".'],
+      cats: ['events', 'action', 'control'],
+      world: { start: { x: 70, y: 110, th: -90 }, zones: [
+        { id: 'c1', x: 70, y: 56, r: 7, label: '1', kind: 'visit' }, { id: 'c2', x: 124, y: 56, r: 7, label: '2', kind: 'visit' },
+        { id: 'c3', x: 124, y: 110, r: 7, label: '3', kind: 'visit' }, { id: 'c4', x: 70, y: 110, r: 7, label: 'START' }] },
+      tick: function (st, w) { visitInOrder(st, w, [[70, 56], [124, 56], [124, 110], [70, 110]], 7); },
+      check: function (st, w) { return st.i === 4 && w.robot.still > 0.3; },
+      why: function (st, w) {
+        if (w.robot.odo < 1) return NOT_MOVING;
+        return 'You reached ' + (st.i || 0) + ' of 4 corners. Each side is 3 seconds at power 50%, each corner is a 0.5 second turn.';
+      } },
+    { id: 'w4b', week: 4, level: 'Beginner', title: 'Blink Five Times', par: 4, requires: ['c_repeat'],
+      desc: 'Blinking by hand takes ten blocks. With a loop it takes four.',
+      goal: 'Make the LEDs blink on and off 5 times using a repeat block.',
+      hints: ['One blink = LED on for a moment, then wait with the LED off.', 'Put the blink inside "repeat 5".'],
+      cats: ['events', 'show', 'control'],
+      world: { start: { x: 100, y: 80, th: -90 } },
+      tick: function (st, w) { var on = !!(w.robot.leds[0] || w.robot.leds[1]); if (on && !st.on) st.n = (st.n || 0) + 1; st.on = on; },
+      check: function (st) { return st.n >= 5 && !st.on; },
+      why: function (st) {
+        if (!st.n) return 'The LEDs never turned on. Add an LED block from Show.';
+        return 'I counted ' + st.n + ' blink' + (st.n === 1 ? '' : 's') + '. Remember to wait a moment with the LED off between blinks.';
+      } },
+    { id: 'w4c', week: 4, level: 'Advanced', title: 'Patrol Guard', par: 4, requires: ['c_repeat'],
+      desc: 'A guard robot walks its route again and again.',
+      goal: 'Drive to the blue zone and back to the green zone 3 times in a row.',
+      hints: ['One trip is: forward, then backward. Repeat the trip 3 times.', 'Add a short LED flash at each end if you want a guard light.'],
+      cats: ['events', 'action', 'show', 'control'],
+      world: { start: { x: 100, y: 120, th: -90 }, zones: [{ id: 'a', x: 100, y: 48, r: 11, label: 'POST', kind: 'visit' }, { id: 'home', x: 100, y: 120, r: 11, label: 'BASE' }] },
+      tick: function (st, w) {
+        st.trips = st.trips || 0;
+        if (!st.out && inZone(w, zone(w, 'a'))) st.out = true;
+        if (st.out && inZone(w, zone(w, 'home')) && Math.abs(w.robot.y - 120) < 6) { st.out = false; st.trips++; }
+      },
+      check: function (st, w) { return st.trips >= 3 && w.robot.still > 0.3; },
+      why: function (st, w) {
+        if (w.robot.odo < 1) return NOT_MOVING;
+        return 'Round trips completed: ' + (st.trips || 0) + ' of 3. Each trip must touch the blue zone and come back to base.';
+      } },
+
+    /* Week 5 - IF / IF-ELSE */
+    { id: 'w5a', week: 5, level: 'Beginner', title: 'Push to Drive', par: 6, requires: ['c_ifelse', 'sn_button'],
+      desc: 'Make the on-board button work like a gas pedal.',
+      goal: 'IF the button is pressed the robot drives, ELSE it stops. Hold the button until the robot is in the zone, then let go.',
+      hints: ['Use forever with an if/else inside it.', 'The condition is "on-board button pressed?" from Sensing. Hold the round button under the arena while the program runs.'],
+      cats: ['events', 'action', 'show', 'control', 'sensing'],
+      world: { start: { x: 100, y: 125, th: -90 }, zones: [{ id: 'goal', x: 100, y: 45, r: 14, label: 'GOAL' }] },
+      tick: function (st, w) { if (w.button && (w.robot.pl || w.robot.pr)) st.drove = true; },
+      check: function (st, w) { return st.drove && !w.button && inZone(w, zone(w, 'goal')) && w.robot.still > 0.5; },
+      why: function (st, w) {
+        if (!st.drove) return 'The robot never drove while the button was pressed. Hold the on-board button while your program is running.';
+        return 'Release the button when the robot is inside the zone so the ELSE part stops it.';
+      } },
+    { id: 'w5b', week: 5, level: 'Intermediate', title: 'Night Light', par: 7, requires: ['c_ifelse', 'sn_light'],
+      desc: 'Street lamps switch on by themselves when it gets dark. Your mBot can too.',
+      goal: 'IF the light value is below 300, turn the LEDs on, ELSE turn them off. Move the light slider to test both cases.',
+      hints: ['Compare with the "<" block from Operators: light intensity < 300.', 'Put the if/else inside forever so the robot keeps checking.'],
+      cats: ['events', 'show', 'control', 'sensing', 'operators'],
+      world: { start: { x: 100, y: 80, th: -90 } },
+      tick: function (st, w) {
+        var on = !!(w.robot.leds[0] || w.robot.leds[1]);
+        if (w.light < 300) { if (on) st.dark = (st.dark || 0) + 1; else st.bad = (st.bad || 0) + 1; }
+        else { if (!on) st.day = (st.day || 0) + 1; else st.bad = (st.bad || 0) + 1; }
+      },
+      check: function (st) { return st.dark > 30 && st.day > 30; },
+      why: function (st) {
+        if (!st.dark) return 'Slide the light sensor below 300 while the program runs. The LEDs should turn on in the dark.';
+        return 'The LEDs turn on in the dark. Now slide the light above 300: they should turn off.';
+      } },
+
+    /* Week 6 - Ultrasonic */
+    { id: 'w6a', week: 6, level: 'Beginner', title: 'Stop Before the Wall', par: 7, requires: ['c_forever'], needsAny: ['sn_ultra', 'sn_obstacle'],
+      desc: 'The ultrasonic sensor is the mBot\'s eyes. Use it to stop in time.',
+      goal: 'Drive toward the wall and stop between 5 cm and 20 cm away from it, without touching it.',
+      hints: ['Forever: IF ultrasonic distance < 15 THEN stop moving ELSE move forward.', 'Watch the distance value under the arena while the robot drives.'],
+      cats: ['events', 'action', 'show', 'control', 'sensing', 'operators'],
+      world: { start: { x: 100, y: 125, th: -90 }, obstacles: [{ x: 60, y: 22, w: 80, h: 12 }] },
+      check: function (st, w) { var d = ultrasonic(w); return w.robot.odo > 40 && w.robot.still > 0.6 && d >= 4 && d <= 20 && w.robot.bumps === 0; },
+      why: function (st, w) {
+        if (w.robot.bumps) return 'Crash! The robot touched the wall. Stop earlier by comparing the distance with a bigger number.';
+        if (w.robot.odo < 1) return NOT_MOVING;
+        return 'The robot stopped ' + ultrasonic(w) + ' cm from the wall. It must stop between 5 and 20 cm.';
+      } },
+    { id: 'w6b', week: 6, level: 'Intermediate', title: 'Avoid the Obstacles', par: 7, requires: ['c_forever'], needsAny: ['sn_ultra', 'sn_obstacle'],
+      desc: 'A robot vacuum never stops at a chair. It turns and keeps going.',
+      goal: 'Explore the room: travel 300 cm in total without bumping into anything.',
+      hints: ['Forever: IF distance < 20 THEN turn right for 0.4 secs ELSE move forward.', 'If the robot clips a corner, react earlier with a bigger distance.'],
+      cats: ['events', 'action', 'show', 'control', 'sensing', 'operators'],
+      world: { start: { x: 100, y: 128, th: -90 }, obstacles: [{ x: 82, y: 58, w: 36, h: 14 }, { x: 28, y: 30, w: 20, h: 20 }, { x: 150, y: 86, w: 22, h: 18 }] },
+      check: function (st, w) { return w.robot.odo >= 300 && w.robot.bumps === 0; },
+      fail: function (st, w) { return w.robot.bumps > 0; },
+      why: function (st, w) {
+        if (w.robot.bumps) return 'Bump! The robot hit something after ' + Math.round(w.robot.odo) + ' cm. Turn earlier: compare the distance with a bigger number.';
+        if (w.robot.odo < 1) return NOT_MOVING;
+        return 'The robot travelled ' + Math.round(w.robot.odo) + ' cm. Keep it exploring until it reaches 300 cm.';
+      } },
+    { id: 'w6c', week: 6, level: 'Advanced', title: 'Maze Runner', par: 10,
+      desc: 'Find a way through the maze to the finish flag.',
+      goal: 'Reach the FINISH zone without touching any wall.',
+      hints: ['Plan the route on paper first: up, right, down, right, up.', 'You can use timed moves, or the ultrasonic sensor: drive until the wall is close, then turn.'],
+      cats: ALL,
+      world: ENVS.maze,
+      check: function (st, w) { return inZone(w, zone(w, 'finish')) && w.robot.bumps === 0; },
+      fail: function (st, w) { return w.robot.bumps > 0; },
+      why: function (st, w) {
+        if (w.robot.bumps) return 'The robot touched a wall. Shorten that move or turn a little earlier.';
+        if (w.robot.odo < 1) return NOT_MOVING;
+        return 'Not at the finish yet. Follow the corridor: up, right, down, right, up.';
+      } },
+
+    /* Week 7 - Line follower */
+    { id: 'w7a', week: 7, level: 'Beginner', title: 'Stop on the Line', par: 6, needsAny: ['sn_line', 'sn_line_detect'],
+      desc: 'The line-follower sensor looks at the floor. Black returns 0, white returns 1 for each side.',
+      goal: 'Drive forward and stop as soon as the robot is on the black line.',
+      hints: ['The sensor value is 3 on white floor and 0 when both sides see black.', 'Move forward, then "wait until line value = 0", then stop moving.'],
+      cats: ALL,
+      world: { start: { x: 100, y: 125, th: -90 }, lines: [{ pts: [[20, 60], [180, 60]], closed: false }] },
+      check: function (st, w) { var s = lineSensors(w); return (s.left || s.right) && w.robot.still > 0.5 && w.robot.odo > 20; },
+      why: function (st, w) {
+        if (w.robot.odo < 1) return NOT_MOVING;
+        return w.robot.y < 60 ? 'The robot drove over the line without stopping. Check the sensor value you compare with.' : 'The robot stopped before reaching the line.';
+      } },
+    { id: 'w7b', week: 7, level: 'Intermediate', title: 'Follow the Black Line', par: 18, requires: ['c_forever'], needsAny: ['sn_line', 'sn_line_detect'],
+      desc: 'The classic mBot mission: stay on the track all the way around.',
+      goal: 'Follow the black line for one full lap, passing all four checkpoints.',
+      hints: ['Value 0: both on black, go forward. Value 1: line is on the left, turn left. Value 2: line is on the right, turn right.', 'Use a slower power (30 to 40%) so the robot does not lose the line in the curves.'],
+      cats: ALL,
+      world: { start: { x: 100, y: 120, th: 0 }, track: 'oval', keepStart: true, zones: [
+        { id: 'p1', x: 170, y: 75, r: 9, label: '1', kind: 'visit' }, { id: 'p2', x: 100, y: 30, r: 9, label: '2', kind: 'visit' },
+        { id: 'p3', x: 30, y: 75, r: 9, label: '3', kind: 'visit' }, { id: 'p4', x: 100, y: 120, r: 9, label: '4', kind: 'visit' }] },
+      tick: function (st, w) { visitInOrder(st, w, [[170, 75], [100, 30], [30, 75], [100, 120]], 9); },
+      check: function (st) { return st.i === 4; },
+      why: function (st, w) {
+        if (w.robot.odo < 1) return NOT_MOVING;
+        return 'Checkpoints passed: ' + (st.i || 0) + ' of 4. If the robot leaves the line, lower the power or check which way it turns for values 1 and 2.';
+      } },
+    { id: 'w7c', week: 7, level: 'Advanced', title: 'Smart Robot', par: 22, requires: ['c_forever'], needsAny: ['sn_line', 'sn_line_detect'], needsAny2: ['sn_ultra', 'sn_obstacle'],
+      desc: 'Combine both sensors: follow the line, but never crash into something left on the track.',
+      goal: 'Follow the line past checkpoints 1 and 2, then stop in front of the box without touching it.',
+      hints: ['Check the ultrasonic sensor first: IF distance < 12 THEN stop moving ELSE do your line-following.', 'An if/else can sit inside another if/else.'],
+      cats: ALL,
+      world: { start: { x: 100, y: 120, th: 0 }, track: 'oval', keepStart: true, obstacles: [{ x: 22, y: 66, w: 16, h: 16 }], zones: [
+        { id: 'p1', x: 170, y: 75, r: 9, label: '1', kind: 'visit' }, { id: 'p2', x: 100, y: 30, r: 9, label: '2', kind: 'visit' }] },
+      tick: function (st, w) { visitInOrder(st, w, [[170, 75], [100, 30]], 9); },
+      check: function (st, w) { return st.i === 2 && w.robot.still > 0.6 && ultrasonic(w) < 20 && w.robot.bumps === 0; },
+      fail: function (st, w) { return w.robot.bumps > 0; },
+      why: function (st, w) {
+        if (w.robot.bumps) return 'Crash! The robot hit the box. Check the distance before you drive, and stop when it is small.';
+        if (w.robot.odo < 1) return NOT_MOVING;
+        return 'Checkpoints passed: ' + (st.i || 0) + ' of 2. After the second one the robot must stop in front of the box.';
+      } }
+  ];
+
+  var POINTS = { Beginner: 10, Intermediate: 20, Advanced: 30 };
+  function starsFor(ch, program) { var n = countBlocks(program); return n <= ch.par ? 3 : n <= ch.par + 3 ? 2 : 1; }
+  function missingRequirement(ch, program) {
+    var u = usedTypes(program), names = {
+      c_repeat: 'a repeat block', c_forever: 'a forever block', c_ifelse: 'an if/else block', sn_button: 'the on-board button block',
+      sn_light: 'the light sensor block', sn_ultra: 'the ultrasonic sensor block', sn_obstacle: 'the ultrasonic sensor block',
+      sn_line: 'the line-follower sensor block', sn_line_detect: 'the line-follower sensor block'
+    };
+    var i, r = ch.requires || [];
+    for (i = 0; i < r.length; i++) if (!u[r[i]]) return names[r[i]];
+    var any = [ch.needsAny, ch.needsAny2];
+    for (i = 0; i < any.length; i++) if (any[i] && !any[i].some(function (t) { return u[t]; })) return names[any[i][0]];
+    return null;
+  }
+
+  /* ---------- session: one run of one program in one world ---------- */
+  function Session(world, challenge) { this.w = world; this.ch = challenge || null; this.phase = 'idle'; this.runner = null; this.msg = null; }
+  Session.prototype.start = function (program, stepMode) {
+    this.program = program; this.st = {}; this.settle = 0; this.msg = null; this.result = null;
+    this.runner = new Runner(this.w, program); this.runner.stepMode = !!stepMode; this.phase = 'run';
+  };
+  Session.prototype.stopMotors = function () { var r = this.w.robot; r.pl = 0; r.pr = 0; r.tone = null; };
+  Session.prototype.halt = function () { if (this.phase === 'run' || this.phase === 'settle') { this.stopMotors(); this.finish(); } };
+  Session.prototype.finish = function () {
+    this.phase = 'ended';
+    if (this.ch && !this.result) { this.result = 'fail'; this.msg = this.ch.why ? this.ch.why(this.st, this.w) : 'Not quite. Read the goal again and try once more.'; }
+  };
+  Session.prototype.tick = function () {
+    if (this.phase !== 'run' && this.phase !== 'settle') return this.phase;
+    if (this.phase === 'run') {
+      this.runner.advance();
+      if (this.runner.done()) { this.stopMotors(); this.phase = 'settle'; this.settle = 0; }
+    }
+    physics(this.w);
+    if (this.ch) {
+      if (this.ch.tick) this.ch.tick(this.st, this.w);
+      if (this.ch.check(this.st, this.w)) {
+        var miss = missingRequirement(this.ch, this.program);
+        this.stopMotors();
+        if (miss) { this.result = 'fail'; this.msg = 'The robot did it, but this challenge must be solved with ' + miss + '. Try again using it.'; this.phase = 'ended'; }
+        else { this.result = 'win'; this.stars = starsFor(this.ch, this.program); this.phase = 'ended'; }
+        return this.phase;
+      }
+      if (this.ch.fail && this.ch.fail(this.st, this.w)) { this.stopMotors(); this.finish(); return this.phase; }
+    }
+    if (this.phase === 'settle' && ++this.settle > 70) this.finish();
+    return this.phase;
+  };
+
+  var api = {
+    ARENA: ARENA, DT: DT, KV: KV, BODY_R: BODY_R, LINE_W: LINE_W, FAN: FAN, LED_COLORS: LED_COLORS, NOTES: NOTES,
+    ENVS: ENVS, TRACKS: TRACKS, CHALLENGES: CHALLENGES, POINTS: POINTS,
+    makeWorld: makeWorld, resetRobot: resetRobot, ultrasonic: ultrasonic, lineSensors: lineSensors, linePoints: linePoints,
+    blocked: blocked, diagnose: diagnose, countBlocks: countBlocks, usedTypes: usedTypes, Session: Session
+  };
+  root.MBotSim = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* mBot Coding Simulator - interface: Blockly workspace, canvas, controls, challenges, progress. */
+(function () {
+  'use strict';
+  var S = window.MBotSim, $ = function (id) { return document.getElementById(id); };
+
+  /* ---------- mBlock-style categories and blocks ---------- */
+  var COL = { events: '#FFBF00', action: '#3D7BF4', show: '#8E5CF5', control: '#FFAB19', sensing: '#24B3C7', operators: '#59C059' };
+  var CAT_NAMES = { events: 'Events', action: 'Action', show: 'Show', control: 'Control', sensing: 'Sensing', operators: 'Operators' };
+  var N = function (name) { return { type: 'input_value', name: name, check: 'Number' }; };
+  var B = function (name) { return { type: 'input_value', name: name, check: 'Boolean' }; };
+  var DD = function (name, opts) { return { type: 'field_dropdown', name: name, options: opts }; };
+  var ST = function (name) { return { type: 'input_statement', name: name }; };
+  var LEDPOS = [['all', 'all'], ['left', 'left'], ['right', 'right']];
+  var LEDCOL = Object.keys(S.LED_COLORS).map(function (c) { return [c, c]; });
+  var NOTEOPT = Object.keys(S.NOTES).map(function (n) { return [n, n]; });
+  var stmt = function (cat, type, msg, args, extra) {
+    var d = { type: type, message0: msg, args0: args || [], previousStatement: null, nextStatement: null, colour: COL[cat], inputsInline: true };
+    for (var k in (extra || {})) d[k] = extra[k];
+    return d;
+  };
+  var val = function (cat, type, msg, args, out) { return { type: type, message0: msg, args0: args || [], output: out, colour: COL[cat], inputsInline: true }; };
+
+  var BLOCKS = [
+    { type: 'num', message0: '%1', args0: [{ type: 'field_number', name: 'NUM', value: 0 }], output: 'Number', colour: '#6f7f9c' },
+    { type: 'ev_flag', message0: 'when ▶ Run clicked', nextStatement: null, colour: COL.events },
+    { type: 'ev_button', message0: 'when on-board button %1', args0: [DD('STATE', [['pressed', 'pressed'], ['released', 'released']])], nextStatement: null, colour: COL.events },
+
+    stmt('action', 'mv_fwd_t', 'move forward at power %1 %% for %2 secs', [N('POWER'), N('SECS')]),
+    stmt('action', 'mv_back_t', 'move backward at power %1 %% for %2 secs', [N('POWER'), N('SECS')]),
+    stmt('action', 'mv_left_t', 'turn left at power %1 %% for %2 secs', [N('POWER'), N('SECS')]),
+    stmt('action', 'mv_right_t', 'turn right at power %1 %% for %2 secs', [N('POWER'), N('SECS')]),
+    stmt('action', 'mv_dir', '%1 at power %2 %%', [DD('DIR', [['move forward', 'forward'], ['move backward', 'backward'], ['turn left', 'left'], ['turn right', 'right']]), N('POWER')]),
+    stmt('action', 'mv_wheels', 'left wheel turns at power %1 %% , right wheel at power %2 %%', [N('L'), N('R')]),
+    stmt('action', 'mv_stop', 'stop moving'),
+
+    stmt('show', 'led_timed', 'LED %1 shows color %2 for %3 secs', [DD('POS', LEDPOS), DD('COLOR', LEDCOL), N('SECS')]),
+    stmt('show', 'led_set', 'LED %1 shows color %2', [DD('POS', LEDPOS), DD('COLOR', LEDCOL)]),
+    stmt('show', 'led_off', 'turn off LED %1', [DD('POS', LEDPOS)]),
+    stmt('show', 'note', 'play note %1 for %2 beats', [DD('NOTE', NOTEOPT), N('BEATS')]),
+    stmt('show', 'tone', 'play sound at frequency of %1 Hz for %2 secs', [N('FREQ'), N('SECS')]),
+
+    val('sensing', 'sn_ultra', 'ultrasonic sensor %1 distance (cm)', [DD('PORT', [['port3', '3'], ['port1', '1'], ['port2', '2'], ['port4', '4']])], 'Number'),
+    val('sensing', 'sn_obstacle', 'obstacle closer than %1 cm ?', [N('CM')], 'Boolean'),
+    val('sensing', 'sn_line', 'line follower sensor %1 value', [DD('PORT', [['port2', '2'], ['port1', '1'], ['port3', '3'], ['port4', '4']])], 'Number'),
+    val('sensing', 'sn_line_detect', 'line follower detects %1 being %2 ?', [DD('SIDE', [['both sides', 'all'], ['left side', 'left'], ['right side', 'right'], ['no side', 'none']]), DD('COLOR', [['black', 'black'], ['white', 'white']])], 'Boolean'),
+    val('sensing', 'sn_light', 'light sensor on-board light intensity', [], 'Number'),
+    val('sensing', 'sn_button', 'when on-board button %1 ?', [DD('STATE', [['pressed', 'pressed'], ['released', 'released']])], 'Boolean'),
+    val('sensing', 'sn_timer', 'timer', [], 'Number'),
+    stmt('sensing', 'sn_reset_timer', 'reset timer'),
+
+    stmt('control', 'c_wait', 'wait %1 seconds', [N('SECS')]),
+    { type: 'c_repeat', message0: 'repeat %1', args0: [N('TIMES')], message1: '%1', args1: [ST('DO')], previousStatement: null, nextStatement: null, colour: COL.control, inputsInline: true },
+    { type: 'c_forever', message0: 'forever', message1: '%1', args1: [ST('DO')], previousStatement: null, colour: COL.control },
+    { type: 'c_if', message0: 'if %1 then', args0: [B('COND')], message1: '%1', args1: [ST('DO')], previousStatement: null, nextStatement: null, colour: COL.control, inputsInline: true },
+    { type: 'c_ifelse', message0: 'if %1 then', args0: [B('COND')], message1: '%1', args1: [ST('DO')], message2: 'else', message3: '%1', args3: [ST('ELSE')], previousStatement: null, nextStatement: null, colour: COL.control, inputsInline: true },
+    stmt('control', 'c_wait_until', 'wait until %1', [B('COND')]),
+    { type: 'c_repeat_until', message0: 'repeat until %1', args0: [B('COND')], message1: '%1', args1: [ST('DO')], previousStatement: null, nextStatement: null, colour: COL.control, inputsInline: true },
+    { type: 'c_stop', message0: 'stop all', previousStatement: null, colour: COL.control },
+
+    val('operators', 'op_add', '%1 + %2', [N('A'), N('B')], 'Number'),
+    val('operators', 'op_sub', '%1 - %2', [N('A'), N('B')], 'Number'),
+    val('operators', 'op_mul', '%1 * %2', [N('A'), N('B')], 'Number'),
+    val('operators', 'op_div', '%1 / %2', [N('A'), N('B')], 'Number'),
+    val('operators', 'op_random', 'pick random %1 to %2', [N('A'), N('B')], 'Number'),
+    val('operators', 'op_gt', '%1 > %2', [N('A'), N('B')], 'Boolean'),
+    val('operators', 'op_lt', '%1 < %2', [N('A'), N('B')], 'Boolean'),
+    val('operators', 'op_eq', '%1 = %2', [N('A'), N('B')], 'Boolean'),
+    val('operators', 'op_and', '%1 and %2', [B('A'), B('B')], 'Boolean'),
+    val('operators', 'op_or', '%1 or %2', [B('A'), B('B')], 'Boolean'),
+    val('operators', 'op_not', 'not %1', [B('A')], 'Boolean')
+  ];
+  // toolbox entries: [type, {input: default number}]
+  var TOOLBOX = {
+    events: [['ev_flag'], ['ev_button']],
+    action: [['mv_fwd_t', { POWER: 50, SECS: 1 }], ['mv_back_t', { POWER: 50, SECS: 1 }], ['mv_left_t', { POWER: 50, SECS: 0.5 }], ['mv_right_t', { POWER: 50, SECS: 0.5 }],
+      ['mv_dir', { POWER: 50 }], ['mv_wheels', { L: 50, R: 50 }], ['mv_stop']],
+    show: [['led_timed', { SECS: 1 }], ['led_set'], ['led_off'], ['note', { BEATS: 0.25 }], ['tone', { FREQ: 700, SECS: 1 }]],
+    control: [['c_wait', { SECS: 1 }], ['c_repeat', { TIMES: 4 }], ['c_forever'], ['c_if'], ['c_ifelse'], ['c_wait_until'], ['c_repeat_until'], ['c_stop']],
+    sensing: [['sn_ultra'], ['sn_obstacle', { CM: 15 }], ['sn_line'], ['sn_line_detect'], ['sn_light'], ['sn_button'], ['sn_timer'], ['sn_reset_timer']],
+    operators: [['op_gt', { A: 0, B: 50 }], ['op_lt', { A: 0, B: 50 }], ['op_eq', { A: 0, B: 0 }], ['op_and'], ['op_or'], ['op_not'],
+      ['op_add', { A: 0, B: 0 }], ['op_sub', { A: 0, B: 0 }], ['op_mul', { A: 0, B: 0 }], ['op_div', { A: 0, B: 0 }], ['op_random', { A: 1, B: 10 }]]
+  };
+  function toolboxFor(cats) {
+    return { kind: 'categoryToolbox', contents: cats.map(function (c) {
+      return { kind: 'category', name: CAT_NAMES[c], colour: COL[c], contents: TOOLBOX[c].map(function (e) {
+        var o = { kind: 'block', type: e[0] };
+        if (e[1]) { o.inputs = {}; for (var k in e[1]) o.inputs[k] = { shadow: { type: 'num', fields: { NUM: e[1][k] } } }; }
+        return o;
+      }) };
+    }) };
+  }
+  var ALL_CATS = ['events', 'action', 'show', 'control', 'sensing', 'operators'];
+  var START_PROGRAM = { blocks: { languageVersion: 0, blocks: [{ type: 'ev_flag', x: 40, y: 40 }] } };
+
+  /* ---------- weeks, quizzes, badges ---------- */
+  var WEEKS = { 2: 'Movement', 3: 'Show: lights and sound', 4: 'Loops', 5: 'IF and IF / ELSE', 6: 'Ultrasonic sensor', 7: 'Line follower' };
+  var QUIZ = {
+    2: [['Which block makes the mBot stop its motors?', ['stop moving', 'wait 1 seconds', 'turn off LED all'], 0],
+        ['What does the number after "power" change?', ['How fast the wheels spin', 'How long the robot moves', 'The color of the LEDs'], 0],
+        ['To turn right on the spot, the wheels must...', ['spin in opposite directions', 'both spin forward', 'both stop'], 0]],
+    3: [['The LEDs and the buzzer are examples of...', ['outputs', 'inputs', 'sensors'], 0],
+        ['Which category holds the LED and buzzer blocks?', ['Show', 'Action', 'Sensing'], 0],
+        ['"LED all shows color red for 1 secs" will...', ['light red, then switch off after 1 second', 'stay red forever', 'blink red five times'], 0]],
+    4: [['Why do programmers use loops?', ['To repeat steps without copying blocks', 'To make the robot faster', 'To read a sensor'], 0],
+        ['How many times does "repeat 4" run the blocks inside it?', ['4', '1', 'Forever'], 0],
+        ['Which block never stops by itself?', ['forever', 'repeat 10', 'wait 1 seconds'], 0]],
+    5: [['An IF block runs the blocks inside it when...', ['its condition is true', 'the program starts', 'the robot is moving'], 0],
+        ['In IF / ELSE, the ELSE part runs when the condition is...', ['false', 'true', 'repeated'], 0],
+        ['Which shape of block fits inside the IF condition?', ['A pointed (hexagon) block', 'A rounded number block', 'A start block'], 0]],
+    6: [['What does the ultrasonic sensor measure?', ['Distance to an object', 'Brightness of light', 'Color of the floor'], 0],
+        ['The ultrasonic sensor is an...', ['input', 'output', 'actuator'], 0],
+        ['"distance < 15" is true when the obstacle is...', ['closer than 15 cm', 'farther than 15 cm', 'exactly 15 cm away'], 0]],
+    7: [['The line follower reads 0 when...', ['both sides see black', 'both sides see white', 'the robot is stopped'], 0],
+        ['The line follower reads 3 when...', ['both sides see white', 'both sides see black', 'only the left side sees black'], 0],
+        ['If only the left side sees black, the robot should...', ['turn left', 'turn right', 'drive backward'], 0]]
+  };
+  var BADGES = [
+    { id: 'first', ic: '🚀', name: 'First Steps', how: 'Complete your first challenge', test: function (p) { return Object.keys(p.done).length >= 1; } },
+    { id: 'w2', ic: '🚗', name: 'Driver', how: 'Finish all Week 2 challenges', week: 2 },
+    { id: 'w3', ic: '🚦', name: 'Light Show', how: 'Finish all Week 3 challenges', week: 3 },
+    { id: 'w4', ic: '🔁', name: 'Loop Master', how: 'Finish all Week 4 challenges', week: 4 },
+    { id: 'w5', ic: '🧠', name: 'Decision Maker', how: 'Finish all Week 5 challenges', week: 5 },
+    { id: 'w6', ic: '📡', name: 'Sensor Pro', how: 'Finish all Week 6 challenges', week: 6 },
+    { id: 'w7', ic: '🛤️', name: 'Line Tracker', how: 'Finish all Week 7 challenges', week: 7 },
+    { id: 'quiz', ic: '🎓', name: 'Quiz Whiz', how: 'Get full marks on every quiz', test: function (p) { return Object.keys(QUIZ).every(function (w) { return p.quiz[w] === 3; }); } },
+    { id: 'stars', ic: '⭐', name: 'Star Collector', how: 'Earn 3 stars on 8 challenges', test: function (p) { return Object.keys(p.done).filter(function (k) { return p.done[k].stars === 3; }).length >= 8; } },
+    { id: 'champ', ic: '🏆', name: 'mBot Champion', how: 'Complete every challenge', test: function (p) { return S.CHALLENGES.every(function (c) { return p.done[c.id]; }); } }
+  ];
+  function hasBadge(b, p) {
+    if (b.test) return b.test(p);
+    return S.CHALLENGES.filter(function (c) { return c.week === b.week; }).every(function (c) { return p.done[c.id]; });
+  }
+
+  /* ---------- saved progress (this browser only until accounts are added) ---------- */
+  var KEY = 'mbotsim.v1';
+  var store = { name: '', done: {}, quiz: {}, programs: {}, last: null };
+  try { var raw = localStorage.getItem(KEY); if (raw) { var o = JSON.parse(raw); for (var k in o) store[k] = o[k]; } } catch (e) { }
+  function persist() { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { } }
+  function points() {
+    var p = 0;
+    S.CHALLENGES.forEach(function (c) { if (store.done[c.id]) p += S.POINTS[c.level]; });
+    for (var w in store.quiz) p += store.quiz[w] * 5;
+    return p;
+  }
+
+  /* ---------- state ---------- */
+  var ws = null, mode = { kind: 'free', env: 'open', track: 'oval' }, world = S.makeWorld(S.ENVS.open), session = null;
+  var run = 'idle', stepping = false, acc = 0, lastT = 0, hintIx = 0, selected = -1, drag = null;
+  var SPEEDS = [0.25, 0.5, 1, 2, 4, 8];
+  var audio = null, osc = null, gain = null;
+
+  function modeKey() { return mode.kind === 'challenge' ? mode.ch.id : 'free'; }
+  function freeSpec() {
+    var s = JSON.parse(JSON.stringify(S.ENVS[mode.env]));
+    if (mode.env === 'line') s.track = mode.track;
+    return s;
+  }
+  function coach(msg, kind) {
+    var c = $('coach'); c.hidden = !msg; c.textContent = msg || ''; c.className = 'coach' + (kind ? ' ' + kind : '');
+  }
+
+  function loadMode(keepProgram) {
+    quietStop();
+    world = S.makeWorld(mode.kind === 'challenge' ? mode.ch.world : freeSpec());
+    world.light = Number($('light').value); selected = -1; hintIx = 0; coach('');
+    var ch = mode.kind === 'challenge' ? mode.ch : null;
+    $('mTitle').textContent = ch ? 'Week ' + ch.week + ': ' + ch.title : 'Free play: ' + S.ENVS[mode.env].name;
+    $('mTag').hidden = !ch; if (ch) { $('mTag').textContent = ch.level; $('mTag').className = 'tag ' + ch.level; }
+    $('mDesc').textContent = ch ? ch.desc : 'Build any program you like and watch your mBot run it. Pick an environment below.';
+    $('mGoal').textContent = ch ? 'Goal: ' + ch.goal : '';
+    $('btnHint').hidden = !ch; $('btnNext').hidden = true;
+    $('env').hidden = !!ch; $('track').hidden = !!ch || mode.env !== 'line';
+    var edit = !ch && mode.env === 'obstacles';
+    $('btnAddBox').hidden = !edit; $('btnDelBox').hidden = !edit; $('btnRot').hidden = !!ch;
+    $('envNote').textContent = ch ? 'In a challenge the arena is fixed. Open Free play to build your own.' :
+      edit ? 'Drag the robot or the boxes. Click a box to select it.' : 'Drag the robot to choose where it starts.';
+    $('env').value = mode.env; $('track').value = mode.track;
+    if (ws) {
+      ws.updateToolbox(toolboxFor(ch ? ch.cats : ALL_CATS));
+      if (!keepProgram) loadProgram(store.programs[modeKey()] || START_PROGRAM);
+    }
+    store.last = mode.kind === 'challenge' ? mode.ch.id : null; persist();
+    $('pts').textContent = points();
+  }
+  function loadProgram(json) {
+    try { ws.clear(); Blockly.serialization.workspaces.load(json, ws); }
+    catch (e) { ws.clear(); Blockly.serialization.workspaces.load(START_PROGRAM, ws); }
+    if (ws.scrollCenter) ws.scrollCenter();
+  }
+  function hl(id) { if (!ws) return; try { ws.highlightBlock(id && ws.getBlockById(id) ? id : null); } catch (e) { } }
+  function getProgram() { return Blockly.serialization.workspaces.save(ws); }
+
+  /* ---------- run control ---------- */
+  function setButtons() {
+    $('btnRun').innerHTML = run === 'paused' ? '&#9654; Resume' : '&#9654; Run';
+    $('btnRun').disabled = run === 'running' && !stepping;
+    $('btnPause').disabled = run !== 'running';
+    $('btnStop').disabled = run === 'idle';
+  }
+  function startRun(step) {
+    var program = getProgram(), d = S.diagnose(program);
+    if (d && d.fatal) { coach(d.msg, 'bad'); return; }
+    coach(d ? d.msg : '');
+    S.resetRobot(world);
+    session = new S.Session(world, mode.kind === 'challenge' ? mode.ch : null);
+    session.start(program, step);
+    stepping = step; run = 'running'; acc = 0; $('btnNext').hidden = true;
+    ensureAudio(); setButtons();
+  }
+  function quietStop() {
+    if (session && (session.phase === 'run' || session.phase === 'settle')) { session.stopMotors(); session.phase = 'ended'; }
+    session = null; run = 'idle'; stepping = false;
+    if (world) { world.robot.pl = 0; world.robot.pr = 0; world.robot.tone = null; }
+    hl(null);
+    setTone(null); setButtons();
+  }
+  function onEnded() {
+    var s = session; run = 'idle'; stepping = false; hl(null); setTone(null); setButtons();
+    if (!s) return;
+    if (s.result === 'win') win(s);
+    else if (s.result === 'fail') coach(s.msg, 'bad');
+    else if (world.robot.bumps) coach('Program finished. The robot bumped into something ' + world.robot.bumps + ' time' + (world.robot.bumps === 1 ? '' : 's') + '.', 'bad');
+    else coach('Program finished.', 'good');
+  }
+  function win(s) {
+    var ch = mode.ch, prev = store.done[ch.id], first = !prev;
+    if (!prev || s.stars > prev.stars) store.done[ch.id] = { stars: s.stars, blocks: S.countBlocks(s.program) };
+    var before = BADGES.filter(function (b) { var p = { done: Object.assign({}, store.done), quiz: store.quiz }; if (first) delete p.done[ch.id]; return hasBadge(b, p); }).map(function (b) { return b.id; });
+    var fresh = BADGES.filter(function (b) { return hasBadge(b, store) && before.indexOf(b.id) < 0; });
+    persist(); $('pts').textContent = points();
+    coach('Challenge complete! ' + starText(s.stars), 'good');
+    var nx = nextChallenge(ch); $('btnNext').hidden = !nx;
+    var h = '<div class="win"><span class="stars">' + starHtml(s.stars) + '</span><h2>Challenge complete!</h2>' +
+      '<p>' + esc(ch.title) + (first ? ' &middot; +' + S.POINTS[ch.level] + ' points' : '') + '</p>' +
+      '<p>' + (s.stars === 3 ? 'Perfect: a short, clean program.' : 'You solved it with ' + S.countBlocks(s.program) + ' blocks. Can you do it with ' + ch.par + ' or fewer for 3 stars?') + '</p>' +
+      fresh.map(function (b) { return '<p><strong>New badge: ' + b.ic + ' ' + esc(b.name) + '</strong></p>'; }).join('') +
+      '<div class="row" style="justify-content:center">' + (nx ? '<button class="btn primary" data-act="next" type="button">Next challenge</button>' : '') +
+      '<button class="btn" data-act="close" type="button">Keep improving</button></div></div>';
+    openModal(h);
+  }
+  function nextChallenge(ch) { var i = S.CHALLENGES.indexOf(ch); return S.CHALLENGES[i + 1] || null; }
+  function starHtml(n) { return '★'.repeat(n) + '<i>' + '★'.repeat(3 - n) + '</i>'; }
+  function starText(n) { return n + ' of 3 stars.'; }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  /* ---------- sound ---------- */
+  function ensureAudio() {
+    if (audio || !$('sound').checked) return;
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+      audio = new AC(); osc = audio.createOscillator(); gain = audio.createGain();
+      osc.type = 'square'; gain.gain.value = 0; osc.connect(gain); gain.connect(audio.destination); osc.start();
+    } catch (e) { audio = null; }
+  }
+  function setTone(f) {
+    if (!audio) return;
+    try {
+      if (f && $('sound').checked && run === 'running') { osc.frequency.value = f; gain.gain.value = 0.04; } else gain.gain.value = 0;
+    } catch (e) { }
+  }
+
+  /* ---------- drawing ---------- */
+  var cv = $('cv'), cx = cv.getContext('2d');
+  function fitCanvas() {
+    var w = cv.clientWidth || 400, dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var W = Math.round(w * dpr), H = Math.round(w * 0.75 * dpr);
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  }
+  function draw() {
+    fitCanvas();
+    var k = cv.width / S.ARENA.w, r = world.robot, i;
+    cx.setTransform(k, 0, 0, k, 0, 0);
+    cx.fillStyle = '#ffffff'; cx.fillRect(0, 0, 200, 150);
+    cx.lineWidth = 0.25;
+    for (i = 10; i < 200; i += 10) { cx.strokeStyle = i % 50 ? '#e9eef5' : '#cfd9e6'; cx.beginPath(); cx.moveTo(i, 0); cx.lineTo(i, 150); cx.stroke(); }
+    for (i = 10; i < 150; i += 10) { cx.strokeStyle = i % 50 ? '#e9eef5' : '#cfd9e6'; cx.beginPath(); cx.moveTo(0, i); cx.lineTo(200, i); cx.stroke(); }
+    // zones
+    world.zones.forEach(function (z) {
+      var col = z.kind === 'visit' ? '47,123,255' : '26,156,85';
+      cx.beginPath(); cx.arc(z.x, z.y, z.r, 0, 6.2832); cx.fillStyle = 'rgba(' + col + ',.14)'; cx.fill();
+      cx.setLineDash([2.5, 2]); cx.lineWidth = 0.7; cx.strokeStyle = 'rgba(' + col + ',.9)'; cx.stroke(); cx.setLineDash([]);
+      cx.fillStyle = 'rgba(' + col + ',1)'; cx.font = '800 ' + (z.label.length > 2 ? 4 : 6) + 'px Nunito, sans-serif'; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+      cx.fillText(z.label, z.x, z.y - (z.label.length > 2 ? z.r + 3.5 : 0));
+    });
+    // black lines
+    cx.strokeStyle = '#111'; cx.lineWidth = S.LINE_W; cx.lineJoin = 'round'; cx.lineCap = 'round';
+    world.lines.forEach(function (l) {
+      cx.beginPath(); l.pts.forEach(function (p, j) { if (j) cx.lineTo(p[0], p[1]); else cx.moveTo(p[0], p[1]); });
+      if (l.closed) cx.closePath(); cx.stroke();
+    });
+    // walls and obstacles
+    world.walls.forEach(function (o) { cx.fillStyle = '#34415e'; cx.fillRect(o.x, o.y, o.w, o.h); });
+    world.obstacles.forEach(function (o, j) {
+      cx.fillStyle = '#f29c38'; cx.fillRect(o.x, o.y, o.w, o.h);
+      cx.strokeStyle = j === selected ? '#1487e0' : '#b86a12'; cx.lineWidth = j === selected ? 1.4 : 0.6; cx.strokeRect(o.x, o.y, o.w, o.h);
+      cx.strokeStyle = '#b86a12'; cx.lineWidth = 0.4; cx.beginPath(); cx.moveTo(o.x, o.y); cx.lineTo(o.x + o.w, o.y + o.h); cx.moveTo(o.x + o.w, o.y); cx.lineTo(o.x, o.y + o.h); cx.stroke();
+    });
+    // path
+    if ($('trail').checked && r.trail.length > 1) {
+      cx.strokeStyle = 'rgba(20,135,224,.55)'; cx.lineWidth = 0.9; cx.beginPath();
+      r.trail.forEach(function (p, j) { if (j) cx.lineTo(p[0], p[1]); else cx.moveTo(p[0], p[1]); });
+      cx.lineTo(r.x, r.y); cx.stroke();
+    }
+    // ultrasonic cone
+    var d = S.ultrasonic(world), ox = r.x + Math.cos(r.th) * 7, oy = r.y + Math.sin(r.th) * 7, reach = Math.min(d, 60);
+    cx.beginPath(); cx.moveTo(ox, oy); cx.arc(ox, oy, reach, r.th - 0.26, r.th + 0.26); cx.closePath();
+    cx.fillStyle = d < 15 ? 'rgba(220,63,69,.22)' : 'rgba(36,179,199,.18)'; cx.fill();
+    if (d <= 60) { cx.beginPath(); cx.arc(ox, oy, reach, r.th - 0.26, r.th + 0.26); cx.strokeStyle = d < 15 ? '#dc3f45' : '#24b3c7'; cx.lineWidth = 0.8; cx.stroke(); }
+    // robot
+    cx.save(); cx.translate(r.x, r.y); cx.rotate(r.th);
+    cx.fillStyle = '#16233f'; rr(-5.5, -8.2, 7, 2.6, 1); rr(-5.5, 5.6, 7, 2.6, 1);
+    cx.fillStyle = '#2f9bf0'; rr(-7.5, -6, 15, 12, 2.6);
+    cx.fillStyle = '#d9ecfb'; rr(-5, -4, 7.5, 8, 1.4);
+    cx.fillStyle = '#16233f'; rr(5.2, -4.6, 2.6, 9.2, 1);
+    cx.fillStyle = '#fff'; dot(6.5, -2.3, 1.5); dot(6.5, 2.3, 1.5);
+    cx.fillStyle = '#16233f'; dot(6.8, -2.3, 0.7); dot(6.8, 2.3, 0.7);
+    [[0.6, -2.2, r.leds[0]], [0.6, 2.2, r.leds[1]]].forEach(function (L) {
+      if (L[2]) { cx.fillStyle = S.LED_COLORS[L[2]]; cx.globalAlpha = 0.35; dot(L[0], L[1], 3.4); cx.globalAlpha = 1; dot(L[0], L[1], 1.5); }
+      else { cx.fillStyle = '#9fb3c8'; dot(L[0], L[1], 1.2); }
+    });
+    cx.restore();
+    if (r.bumping) { cx.strokeStyle = '#dc3f45'; cx.lineWidth = 0.8; cx.beginPath(); cx.arc(r.x, r.y, 10.5, 0, 6.2832); cx.stroke(); }
+    // line sensor eyes
+    var ls = S.lineSensors(world);
+    if (world.lines.length) {
+      var lp = S.linePoints(r);
+      [[lp.l, ls.left], [lp.r, ls.right]].forEach(function (e) {
+        cx.beginPath(); cx.arc(e[0][0], e[0][1], 0.9, 0, 6.2832); cx.fillStyle = e[1] ? '#ff3b30' : '#34c759'; cx.fill();
+        cx.strokeStyle = '#fff'; cx.lineWidth = 0.3; cx.stroke();
+      });
+    }
+    // gauges
+    $('gDist').textContent = d.toFixed(1);
+    $('gL').className = 'eye' + (ls.left ? ' black' : ''); $('gR').className = 'eye' + (ls.right ? ' black' : ''); $('gLine').textContent = ls.value;
+    $('gMot').textContent = Math.round(r.pl) + ' / ' + Math.round(r.pr);
+    $('gLed1').style.background = r.leds[0] ? S.LED_COLORS[r.leds[0]] : 'transparent';
+    $('gLed2').style.background = r.leds[1] ? S.LED_COLORS[r.leds[1]] : 'transparent';
+    $('gTone').textContent = r.tone ? Math.round(r.tone) + ' Hz' : 'quiet';
+    $('gTime').textContent = (world.time - world.timer0).toFixed(1);
+    $('gBump').textContent = r.bumps;
+  }
+  function rr(x, y, w, h, rad) {
+    cx.beginPath(); cx.moveTo(x + rad, y); cx.arcTo(x + w, y, x + w, y + h, rad); cx.arcTo(x + w, y + h, x, y + h, rad);
+    cx.arcTo(x, y + h, x, y, rad); cx.arcTo(x, y, x + w, y, rad); cx.closePath(); cx.fill();
+  }
+  function dot(x, y, r) { cx.beginPath(); cx.arc(x, y, r, 0, 6.2832); cx.fill(); }
+
+  function frame(t) {
+    var dt = Math.min(0.1, (t - lastT) / 1000 || 0); lastT = t;
+    if (run === 'running' && session) {
+      acc += dt * 60 * SPEEDS[Number($('speed').value)];
+      var n = Math.min(200, Math.floor(acc)); acc -= n;
+      for (var i = 0; i < n; i++) {
+        var ph = session.tick();
+        if (ph === 'ended') { onEnded(); break; }
+        if (stepping && session.runner.newBlock) { run = 'paused'; setButtons(); break; }
+      }
+      if (session && session.runner) hl(session.phase === 'run' ? session.runner.cur : null);
+      setTone(world.robot.tone);
+    } else setTone(null);
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------- arena editing (free play, while stopped) ---------- */
+  function cm(e) { var b = cv.getBoundingClientRect(); return { x: (e.clientX - b.left) / b.width * 200, y: (e.clientY - b.top) / b.height * 150 }; }
+  cv.addEventListener('pointerdown', function (e) {
+    if (mode.kind !== 'free' || run !== 'idle') return;
+    var p = cm(e), r = world.robot, i;
+    if (Math.hypot(p.x - r.x, p.y - r.y) < 10) { drag = { t: 'robot' }; }
+    else if (mode.env === 'obstacles') {
+      selected = -1;
+      for (i = world.obstacles.length - 1; i >= 0; i--) {
+        var o = world.obstacles[i];
+        if (p.x >= o.x && p.x <= o.x + o.w && p.y >= o.y && p.y <= o.y + o.h) { selected = i; drag = { t: 'box', dx: p.x - o.x, dy: p.y - o.y }; break; }
+      }
+    }
+    if (drag) { cv.setPointerCapture(e.pointerId); e.preventDefault(); }
+  });
+  cv.addEventListener('pointermove', function (e) {
+    if (!drag) return;
+    var p = cm(e);
+    if (drag.t === 'robot') {
+      var x = Math.max(8, Math.min(192, p.x)), y = Math.max(8, Math.min(142, p.y));
+      if (!S.blocked(world, x, y)) { world.start.x = x; world.start.y = y; S.resetRobot(world); }
+    } else {
+      var o = world.obstacles[selected];
+      o.x = Math.max(0, Math.min(200 - o.w, p.x - drag.dx)); o.y = Math.max(0, Math.min(150 - o.h, p.y - drag.dy));
+      if (S.blocked(world, world.robot.x, world.robot.y)) { o.x = drag.ox === undefined ? o.x : drag.ox; o.y = drag.oy === undefined ? o.y : drag.oy; }
+      else { drag.ox = o.x; drag.oy = o.y; }
+    }
+  });
+  var endDrag = function () { drag = null; };
+  cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
+
+  /* ---------- modals ---------- */
+  function openModal(html) { $('sheet').innerHTML = html; $('modal').hidden = false; var b = $('sheet').querySelector('button'); if (b) b.focus(); }
+  function closeModal() { $('modal').hidden = true; $('sheet').innerHTML = ''; }
+  $('modal').addEventListener('click', function (e) {
+    if (e.target === $('modal')) return closeModal();
+    var b = e.target.closest('[data-act]'); if (!b) return;
+    var a = b.dataset.act;
+    if (a === 'close') closeModal();
+    else if (a === 'ch') { mode = { kind: 'challenge', ch: S.CHALLENGES.find(function (c) { return c.id === b.dataset.id; }), env: mode.env, track: mode.track }; closeModal(); loadMode(); }
+    else if (a === 'next') { var nx = nextChallenge(mode.ch); closeModal(); if (nx) { mode.ch = nx; loadMode(); } }
+    else if (a === 'quiz') showQuiz(Number(b.dataset.week));
+    else if (a === 'opt') answer(b);
+    else if (a === 'weeks') showWeeks();
+    else if (a === 'download') download();
+    else if (a === 'copy') copyShare(b);
+    else if (a === 'open') $('file').click();
+    else if (a === 'paste') pasteLoad();
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('modal').hidden) closeModal(); });
+  var head = function (t) { return '<div class="sheet-head"><h2>' + t + '</h2><button class="btn small x" data-act="close" type="button">Close</button></div>'; };
+
+  function showWeeks() {
+    var h = head('Challenges');
+    Object.keys(WEEKS).forEach(function (w) {
+      var q = store.quiz[w];
+      h += '<div class="week"><h3>Week ' + w + ' <span>' + WEEKS[w] + '</span><button class="btn small" data-act="quiz" data-week="' + w + '" type="button">Quiz' + (q !== undefined ? ' ' + q + '/3' : '') + '</button></h3><div class="chs">';
+      S.CHALLENGES.filter(function (c) { return c.week === Number(w); }).forEach(function (c) {
+        var d = store.done[c.id];
+        h += '<button class="ch" data-act="ch" data-id="' + c.id + '" type="button"><span class="tag ' + c.level + '">' + c.level + '</span><strong>' + esc(c.title) + '</strong><span class="stars">' + starHtml(d ? d.stars : 0) + '</span></button>';
+      });
+      h += '</div></div>';
+    });
+    openModal(h);
+  }
+  function showBadges() {
+    var h = head('Badges') + '<p>' + points() + ' points &middot; ' + Object.keys(store.done).length + ' of ' + S.CHALLENGES.length + ' challenges complete</p><div class="badges">';
+    BADGES.forEach(function (b) { var on = hasBadge(b, store); h += '<div class="badge' + (on ? '' : ' off') + '"><div class="ic">' + b.ic + '</div><strong>' + b.name + '</strong><small>' + b.how + '</small></div>'; });
+    openModal(h + '</div>');
+  }
+  var quizState = null;
+  function showQuiz(week) {
+    quizState = { week: week, right: 0, answered: 0 };
+    var h = head('Week ' + week + ' quiz: ' + WEEKS[week]);
+    QUIZ[week].forEach(function (q, i) {
+      var order = [0, 1, 2].sort(function () { return Math.random() - 0.5; });
+      h += '<p class="quiz-q">' + (i + 1) + '. ' + esc(q[0]) + '</p><div class="opts" data-q="' + i + '">' +
+        order.map(function (o) { return '<button class="opt" data-act="opt" data-ok="' + (o === q[2] ? 1 : 0) + '" type="button">' + esc(q[1][o]) + '</button>'; }).join('') + '</div>';
+    });
+    h += '<div class="row"><strong id="quizOut">Answer all three questions.</strong><button class="btn small" data-act="weeks" type="button">Back to challenges</button></div>';
+    openModal(h);
+  }
+  function answer(b) {
+    var box = b.parentNode; if (box.dataset.done) return; box.dataset.done = 1;
+    var ok = b.dataset.ok === '1'; b.classList.add(ok ? 'right' : 'wrong');
+    if (!ok) box.querySelector('[data-ok="1"]').classList.add('right');
+    quizState.answered++; if (ok) quizState.right++;
+    if (quizState.answered === 3) {
+      var prev = store.quiz[quizState.week];
+      if (prev === undefined || quizState.right > prev) store.quiz[quizState.week] = quizState.right;
+      persist(); $('pts').textContent = points();
+      $('quizOut').textContent = 'You scored ' + quizState.right + ' of 3.' + (quizState.right === 3 ? ' Full marks!' : ' Open the quiz again to improve.');
+    }
+  }
+  function shareData() {
+    return JSON.stringify({ app: 'mbot-coding-simulator', v: 1, student: store.name || '', challenge: modeKey(), saved: new Date().toISOString(), program: getProgram() });
+  }
+  function showShare() {
+    openModal(head('Save / Share') +
+      '<p>Your programs and progress save automatically in this browser. To hand a program to your teacher, download it or copy the code.</p>' +
+      '<label class="field" for="stName">Your name<input id="stName" type="text" maxlength="60" value="' + esc(store.name || '') + '" autocomplete="name"></label>' +
+      '<div class="row"><button class="btn primary" data-act="download" type="button">Download program file</button><button class="btn" data-act="copy" type="button">Copy program code</button><button class="btn" data-act="open" type="button">Open a program file</button></div>' +
+      '<label class="field" for="shareBox">Program code (paste a code here and press Load to open it)<textarea class="share" id="shareBox" spellcheck="false">' + esc(shareData()) + '</textarea></label>' +
+      '<div class="row"><button class="btn" data-act="paste" type="button">Load code from the box</button><strong id="shareOut"></strong></div>');
+    $('stName').addEventListener('input', function () { store.name = this.value.trim(); persist(); $('shareBox').value = shareData(); });
+  }
+  function download() {
+    try {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([shareData()], { type: 'application/json' }));
+      a.download = 'mbot-' + modeKey() + (store.name ? '-' + store.name.replace(/[^\w؀-ۿ]+/g, '_') : '') + '.json';
+      document.body.appendChild(a); a.click(); a.remove();
+      $('shareOut').textContent = 'If no file was saved, use "Copy program code" instead.';
+    } catch (e) { $('shareOut').textContent = 'Download is not available here. Use "Copy program code".'; }
+  }
+  function copyShare() {
+    var box = $('shareBox'), done = function () { $('shareOut').textContent = 'Copied. Paste it in a message to your teacher.'; };
+    try { navigator.clipboard.writeText(box.value).then(done, function () { box.select(); $('shareOut').textContent = 'Press Ctrl + C to copy the selected code.'; }); }
+    catch (e) { box.select(); $('shareOut').textContent = 'Press Ctrl + C to copy the selected code.'; }
+  }
+  function openData(text) {
+    var o = JSON.parse(text), prog = o.program || o;
+    if (!prog || !prog.blocks) throw new Error('bad');
+    var ch = S.CHALLENGES.find(function (c) { return c.id === o.challenge; });
+    if (ch) { mode = { kind: 'challenge', ch: ch, env: mode.env, track: mode.track }; loadMode(true); }
+    else if (o.challenge === 'free' && mode.kind !== 'free') { mode.kind = 'free'; loadMode(true); }
+    loadProgram(prog); saveProgram();
+  }
+  function pasteLoad() {
+    try { openData($('shareBox').value); closeModal(); coach('Program loaded.', 'good'); }
+    catch (e) { $('shareOut').textContent = 'That code could not be read. Copy the whole code and try again.'; }
+  }
+  $('file').addEventListener('change', function () {
+    var f = this.files[0]; if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function () { try { openData(String(rd.result)); closeModal(); coach('Program loaded.', 'good'); } catch (e) { coach('That file is not an mBot Coding Simulator program.', 'bad'); closeModal(); } };
+    rd.readAsText(f); this.value = '';
+  });
+
+  /* ---------- controls ---------- */
+  $('btnRun').onclick = function () {
+    if (run === 'paused') { stepping = false; session.runner.stepMode = false; run = 'running'; ensureAudio(); setButtons(); }
+    else startRun(false);
+  };
+  $('btnPause').onclick = function () { if (run === 'running') { run = 'paused'; setButtons(); } };
+  $('btnStep').onclick = function () {
+    if (run === 'idle') { startRun(true); return; }
+    if (!session) return;
+    stepping = true; session.runner.stepMode = true; run = 'running'; setButtons();
+  };
+  $('btnStop').onclick = function () { if (session && run !== 'idle') { session.halt(); onEnded(); } };
+  $('btnReset').onclick = function () { quietStop(); S.resetRobot(world); world.robot.leds = [null, null]; coach(''); };
+  $('speed').oninput = function () { $('speedOut').textContent = SPEEDS[Number(this.value)] + 'x'; };
+  $('light').oninput = function () { world.light = Number(this.value); $('gLight').textContent = this.value; };
+  var hold = $('hold');
+  var press = function (v) { return function (e) { world.button = v; hold.classList.toggle('down', v); hold.textContent = v ? 'Pressed' : 'Hold to press'; if (v && e.pointerId !== undefined) hold.setPointerCapture(e.pointerId); }; };
+  hold.addEventListener('pointerdown', press(true)); hold.addEventListener('pointerup', press(false)); hold.addEventListener('pointercancel', press(false));
+  hold.addEventListener('keydown', function (e) { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); press(true)(e); } });
+  hold.addEventListener('keyup', function (e) { if (e.key === ' ' || e.key === 'Enter') press(false)(e); });
+  $('btnHint').onclick = function () { var h = mode.ch.hints; coach('Hint: ' + h[hintIx % h.length]); hintIx++; };
+  $('btnNext').onclick = function () { var nx = nextChallenge(mode.ch); if (nx) { mode.ch = nx; loadMode(); } };
+  $('btnWeeks').onclick = showWeeks; $('btnBadges').onclick = showBadges; $('btnShare').onclick = showShare;
+  $('btnFree').onclick = function () { mode.kind = 'free'; loadMode(); };
+  $('env').onchange = function () { mode.env = this.value; loadMode(true); };
+  $('track').onchange = function () { mode.track = this.value; loadMode(true); };
+  $('btnAddBox').onclick = function () {
+    if (run !== 'idle') return;
+    for (var t = 0; t < 40; t++) {
+      var o = { x: 20 + Math.random() * 140, y: 15 + Math.random() * 90, w: 20, h: 16 };
+      world.obstacles.push(o);
+      if (!S.blocked(world, world.robot.x, world.robot.y)) { selected = world.obstacles.length - 1; return; }
+      world.obstacles.pop();
+    }
+  };
+  $('btnDelBox').onclick = function () { if (run === 'idle' && selected >= 0) { world.obstacles.splice(selected, 1); selected = -1; } };
+  $('zIn').onclick = function () { if (ws) ws.zoomCenter(1); };
+  $('zOut').onclick = function () { if (ws) ws.zoomCenter(-1); };
+  $('undo').onclick = function () { if (ws) ws.undo(false); };
+  $('redo').onclick = function () { if (ws) ws.undo(true); };
+  $('btnRot').onclick = function () { if (run === 'idle') { world.start.th = (world.start.th + 45) % 360; S.resetRobot(world); } };
+
+  /* ---------- Blockly ---------- */
+  var saveTimer = null;
+  function saveProgram() { store.programs[modeKey()] = getProgram(); persist(); }
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function boot() {
+    if (!window.Blockly) { $('loadErr').hidden = false; $('blockly').hidden = true; return; }
+    ((Blockly.common && Blockly.common.defineBlocksWithJsonArray) || Blockly.defineBlocksWithJsonArray)(BLOCKS);
+    var theme = Blockly.Theme.defineTheme('mbotsim', {
+      base: Blockly.Themes.Zelos || Blockly.Themes.Classic, startHats: true,
+      fontStyle: { family: 'Nunito, "Segoe UI", sans-serif', weight: '800', size: 11 },
+      componentStyles: {
+        workspaceBackgroundColour: css('--ws'), toolboxBackgroundColour: css('--panel'), toolboxForegroundColour: css('--ink'),
+        flyoutBackgroundColour: css('--panel-2'), flyoutForegroundColour: css('--ink'), flyoutOpacity: 0.97,
+        scrollbarColour: css('--muted'), scrollbarOpacity: 0.5, insertionMarkerColour: css('--ink'), insertionMarkerOpacity: 0.3
+      }
+    });
+    ws = Blockly.inject('blockly', {
+      toolbox: toolboxFor(ALL_CATS), renderer: 'zelos', theme: theme, trashcan: false, sounds: false,
+      zoom: { controls: false, wheel: false, startScale: 0.8, maxScale: 1.6, minScale: 0.4, scaleSpeed: 1.15 },
+      move: { scrollbars: true, drag: true, wheel: true },
+      grid: { spacing: 28, length: 2, colour: css('--line'), snap: false }
+    });
+    ws.addChangeListener(function (e) {
+      if (e.isUiEvent) return;
+      clearTimeout(saveTimer); saveTimer = setTimeout(saveProgram, 400);
+    });
+    if (window.ResizeObserver) new ResizeObserver(function () { Blockly.svgResize(ws); }).observe($('blockly'));
+    window.addEventListener('resize', function () { Blockly.svgResize(ws); });
+    var last = store.last && S.CHALLENGES.find(function (c) { return c.id === store.last; });
+    if (last) mode = { kind: 'challenge', ch: last, env: 'open', track: 'oval' };
+    loadMode();
+    if (!last && !Object.keys(store.done).length) showWeeks();
+  }
+  function start() {
+    $('speedOut').textContent = SPEEDS[Number($('speed').value)] + 'x';
+    loadMode(); setButtons(); requestAnimationFrame(frame);
+    if (window.Blockly) return boot();
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/blockly@11.1.1/blockly.min.js';
+    s.onload = boot; s.onerror = boot; document.head.appendChild(s);
+  }
+  start();
+})();
+
+</script>
+</body>
+</html>
