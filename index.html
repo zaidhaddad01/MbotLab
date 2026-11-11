@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>mBot Coding Simulator</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@600;700;800&display=swap">
 <style>
 /* Layout: one-screen coding bench. Blocks and workspace fill the left, the robot arena and its instruments sit in a fixed right column. */
@@ -142,6 +141,46 @@ textarea.share { width: 100%; height: 130px; font-family: var(--mono); font-size
   .sim { overflow: visible; }
   .brand h1 { font-size: 1.2rem; }
 }
+/* accounts and teacher dashboard */
+.sheet.wide { width: min(1180px, 100%); }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.btn.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+.demo { background: var(--panel-2); border: 2px dashed var(--warn); border-radius: 10px; padding: 8px 10px; font-weight: 700; margin: 0 0 10px; }
+.note { position: sticky; top: 0; z-index: 2; background: var(--sun); color: var(--on-sun); border-radius: 10px; padding: 8px 10px; font-weight: 800; margin: 0 0 8px; }
+.note:empty { display: none; }
+.tblwrap { overflow-x: auto; border: 2px solid var(--line); border-radius: 12px; }
+.tbl { border-collapse: collapse; width: 100%; font-size: .9rem; }
+.tbl th, .tbl td { padding: 6px 9px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: middle; }
+.tbl th { font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); background: var(--panel-2); }
+.tbl tbody tr:last-child td { border-bottom: 0; }
+.tbl tr.off td { opacity: .55; }
+.tbl .num { font-variant-numeric: tabular-nums; text-align: right; }
+.tbl .mono { font-family: var(--mono); }
+.acts { display: flex; gap: 4px; }
+.tbl.grid th { vertical-align: bottom; }
+.tbl.grid th small { display: block; text-transform: none; letter-spacing: 0; font-weight: 700; font-size: .72rem; width: 76px; white-space: normal; color: var(--ink); }
+.tbl.grid td.cell { text-align: center; font-weight: 800; color: var(--muted); }
+.tbl.grid td.cell.s3 { color: var(--go); }
+.tbl.grid td.cell.s2, .tbl.grid td.cell.s1 { color: var(--warn); }
+.wk { width: 28px; height: 28px; border-radius: 8px; border: 2px solid var(--line); background: var(--panel-2); font-weight: 800; padding: 0; margin-right: 3px; }
+.wk.on { background: var(--go); border-color: var(--go); color: #fff; }
+.wk.fixed { opacity: .5; cursor: default; }
+.link { background: none; border: 0; padding: 0; color: var(--brand); font-weight: 800; text-decoration: underline; }
+.bar { display: inline-block; width: 120px; max-width: 30vw; height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; vertical-align: middle; margin-right: 8px; }
+.bar i { display: block; height: 100%; background: var(--go); }
+.flag { font-weight: 800; color: var(--muted); }
+.flag.bad { color: var(--halt); }
+.flag.ok { color: var(--go); }
+.form { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 0 14px; }
+.form .full { grid-column: 1 / -1; }
+.field select, .field textarea, .row input[type=text], .field input[type=number] { border: 2px solid var(--line); border-radius: 10px; padding: 7px 10px; background: var(--panel-2); font-weight: 700; max-width: 100%; }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 16px; font-weight: 700; }
+.chk { font-weight: 700; display: inline-flex; gap: 6px; align-items: center; }
+textarea.names { height: 100px; font-family: var(--body); font-size: .95rem; }
+.ch:disabled { opacity: .45; cursor: not-allowed; }
+.ch:disabled:hover { border-color: var(--line); }
+.login { max-width: 380px; }
+.week ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
 /* Blockly chrome */
 .blocklyToolboxDiv { border-right: 2px solid var(--line); }
 .blocklyTreeLabel { font-family: var(--body) !important; font-weight: 800 !important; }
@@ -160,6 +199,8 @@ textarea.share { width: 100%; height: 130px; font-family: var(--mono); font-size
   <button class="pill" id="btnBadges" type="button">Badges</button>
   <button class="pill" id="btnShare" type="button">Save / Share</button>
   <span class="pill pts" title="Your points">&#9733; <span id="pts">0</span> pts</span>
+  <button class="pill sun" id="btnDash" type="button" hidden>Teacher dashboard</button>
+  <button class="pill" id="btnAuth" type="button" hidden>Log in (demo)</button>
 </div></header>
 
 <main class="app">
@@ -180,6 +221,7 @@ textarea.share { width: 100%; height: 130px; font-family: var(--mono); font-size
       <div class="mission-actions">
         <button class="btn small" id="btnHint" type="button">Show a hint</button>
         <button class="btn small" id="btnNext" type="button" hidden>Next challenge</button>
+        <button class="btn small" id="btnSend" type="button" hidden>Send to teacher</button>
       </div>
       <div class="coach" id="coach" role="status" hidden></div>
     </div>
@@ -233,6 +275,21 @@ textarea.share { width: 100%; height: 130px; font-family: var(--mono); font-size
 <input type="file" id="file" accept=".json,application/json" hidden>
 
 <script src="https://unpkg.com/blockly@11.1.1/blockly.min.js"></script>
+<script>
+/* ============================================================
+   FIREBASE SETUP
+   Paste the values from your Firebase project between the quotes.
+   While apiKey is empty the site runs in demo mode (no logins).
+   ============================================================ */
+window.MBOT_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDMGnbRrXpdLrhYxymtk51dkFV22SRkLwE",
+  authDomain: "mbotlab-860a9.firebaseapp.com",
+  projectId: "mbotlab-860a9",
+  storageBucket: "mbotlab-860a9.firebasestorage.app",
+  messagingSenderId: "318411465763",
+  appId: "1:318411465763:web:74cd2fc03d018a77b3bd96"
+};
+</script>
 <script>
 /* mBot Coding Simulator - simulation engine (physics, sensors, block interpreter, challenges).
    Runs in the browser and in Node (for tests). No DOM access in this file. */
@@ -1003,16 +1060,45 @@ textarea.share { width: 100%; height: 130px; font-family: var(--mono); font-size
     return S.CHALLENGES.filter(function (c) { return c.week === b.week; }).every(function (c) { return p.done[c.id]; });
   }
 
-  /* ---------- saved progress (this browser only until accounts are added) ---------- */
-  var KEY = 'mbotsim.v1';
-  var store = { name: '', done: {}, quiz: {}, programs: {}, last: null };
-  try { var raw = localStorage.getItem(KEY); if (raw) { var o = JSON.parse(raw); for (var k in o) store[k] = o[k]; } } catch (e) { }
-  function persist() { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { } }
-  function points() {
-    var p = 0;
-    S.CHALLENGES.forEach(function (c) { if (store.done[c.id]) p += S.POINTS[c.level]; });
-    for (var w in store.quiz) p += store.quiz[w] * 5;
+  /* ---------- saved progress: this browser in demo mode, the class server when logged in ---------- */
+  var CFG = window.MBOT_FIREBASE_CONFIG || null, cloud = !!(CFG && CFG.apiKey);
+  var KEY = 'mbotsim.v1', be = null, user = null, customs = [], dirty = false, pushT = null, modalLock = false;
+  function blankStore() { return { name: '', done: {}, quiz: {}, programs: {}, tries: {}, submitted: {}, last: null }; }
+  function localStore() {
+    var st = blankStore();
+    try { var raw = localStorage.getItem(KEY); if (raw) { var o = JSON.parse(raw); for (var k in o) st[k] = o[k]; } } catch (e) { }
+    return st;
+  }
+  var store = cloud ? blankStore() : localStore();
+  function persist(now) {
+    if (user) { if (user.role !== 'student') return; dirty = true; clearTimeout(pushT); pushT = setTimeout(push, now ? 30 : 6000); return; }
+    if (cloud) return;
+    try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { }
+  }
+  function push() {
+    clearTimeout(pushT);
+    if (!dirty || !user || user.role !== 'student' || !be) return Promise.resolve();
+    dirty = false;
+    var progs = {}, k;
+    for (k in store.programs) progs[k] = JSON.stringify(store.programs[k]);
+    return be.updateStudent(user.uid, { done: store.done, quiz: store.quiz, programs: progs, tries: store.tries, submitted: store.submitted, lastSeen: Date.now() })
+      .catch(function () { dirty = true; });
+  }
+  function findCh(id) {
+    var all = S.CHALLENGES.concat(customs);
+    for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i];
+    return null;
+  }
+  function pointsOf(done, quiz) {
+    var p = 0, k, c;
+    for (k in done) { c = findCh(k); if (c) p += S.POINTS[c.level] || 0; }
+    for (k in quiz) p += quiz[k] * 5;
     return p;
+  }
+  function points() { return pointsOf(store.done, store.quiz); }
+  function unlocked(week) {
+    if (!week || !user || user.role !== 'student') return true;
+    return ((user.group && user.group.weeks) || []).indexOf(week) >= 0 || (user.profile.extraWeeks || []).indexOf(week) >= 0;
   }
 
   /* ---------- state ---------- */
@@ -1036,7 +1122,7 @@ textarea.share { width: 100%; height: 130px; font-family: var(--mono); font-size
     world = S.makeWorld(mode.kind === 'challenge' ? mode.ch.world : freeSpec());
     world.light = Number($('light').value); selected = -1; hintIx = 0; coach('');
     var ch = mode.kind === 'challenge' ? mode.ch : null;
-    $('mTitle').textContent = ch ? 'Week ' + ch.week + ': ' + ch.title : 'Free play: ' + S.ENVS[mode.env].name;
+    $('mTitle').textContent = ch ? (ch.custom ? 'Assignment: ' : 'Week ' + ch.week + ': ') + ch.title : 'Free play: ' + S.ENVS[mode.env].name;
     $('mTag').hidden = !ch; if (ch) { $('mTag').textContent = ch.level; $('mTag').className = 'tag ' + ch.level; }
     $('mDesc').textContent = ch ? ch.desc : 'Build any program you like and watch your mBot run it. Pick an environment below.';
     $('mGoal').textContent = ch ? 'Goal: ' + ch.goal : '';
@@ -1074,7 +1160,8 @@ textarea.share { width: 100%; height: 130px; font-family: var(--mono); font-size
     if (d && d.fatal) { coach(d.msg, 'bad'); return; }
     coach(d ? d.msg : '');
     S.resetRobot(world);
-    session = new S.Session(world, mode.kind === 'challenge' ? mode.ch : null);
+    session = new S.Session(world, mode.kind === 'challenge' && !mode.ch.review ? mode.ch : null);
+    if (mode.kind === 'challenge') { var tr = store.tries[mode.ch.id] || (store.tries[mode.ch.id] = { r: 0, f: 0 }); tr.r++; }
     session.start(program, step);
     stepping = step; run = 'running'; acc = 0; $('btnNext').hidden = true;
     ensureAudio(); setButtons();
@@ -1090,16 +1177,17 @@ textarea.share { width: 100%; height: 130px; font-family: var(--mono); font-size
     var s = session; run = 'idle'; stepping = false; hl(null); setTone(null); setButtons();
     if (!s) return;
     if (s.result === 'win') win(s);
-    else if (s.result === 'fail') coach(s.msg, 'bad');
+    else if (s.result === 'fail') { coach(s.msg, 'bad'); if (mode.kind === 'challenge' && store.tries[mode.ch.id]) { store.tries[mode.ch.id].f++; persist(); } }
     else if (world.robot.bumps) coach('Program finished. The robot bumped into something ' + world.robot.bumps + ' time' + (world.robot.bumps === 1 ? '' : 's') + '.', 'bad');
     else coach('Program finished.', 'good');
   }
   function win(s) {
     var ch = mode.ch, prev = store.done[ch.id], first = !prev;
-    if (!prev || s.stars > prev.stars) store.done[ch.id] = { stars: s.stars, blocks: S.countBlocks(s.program) };
+    if (!prev || s.stars > prev.stars) store.done[ch.id] = { stars: s.stars, blocks: S.countBlocks(s.program), at: Date.now() };
+    store.submitted[ch.id] = { p: JSON.stringify(s.program), at: Date.now(), ok: true };
     var before = BADGES.filter(function (b) { var p = { done: Object.assign({}, store.done), quiz: store.quiz }; if (first) delete p.done[ch.id]; return hasBadge(b, p); }).map(function (b) { return b.id; });
     var fresh = BADGES.filter(function (b) { return hasBadge(b, store) && before.indexOf(b.id) < 0; });
-    persist(); $('pts').textContent = points();
+    persist(true); $('pts').textContent = points();
     coach('Challenge complete! ' + starText(s.stars), 'good');
     var nx = nextChallenge(ch); $('btnNext').hidden = !nx;
     var h = '<div class="win"><span class="stars">' + starHtml(s.stars) + '</span><h2>Challenge complete!</h2>' +
@@ -1110,7 +1198,7 @@ textarea.share { width: 100%; height: 130px; font-family: var(--mono); font-size
       '<button class="btn" data-act="close" type="button">Keep improving</button></div></div>';
     openModal(h);
   }
-  function nextChallenge(ch) { var i = S.CHALLENGES.indexOf(ch); return S.CHALLENGES[i + 1] || null; }
+  function nextChallenge(ch) { var i = S.CHALLENGES.indexOf(ch), n = i < 0 ? null : S.CHALLENGES[i + 1]; return n && unlocked(n.week) ? n : null; }
   function starHtml(n) { return '★'.repeat(n) + '<i>' + '★'.repeat(3 - n) + '</i>'; }
   function starText(n) { return n + ' of 3 stars.'; }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -1266,14 +1354,18 @@ textarea.share { width: 100%; height: 130px; font-family: var(--mono); font-size
   cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
 
   /* ---------- modals ---------- */
-  function openModal(html) { $('sheet').innerHTML = html; $('modal').hidden = false; var b = $('sheet').querySelector('button'); if (b) b.focus(); }
-  function closeModal() { $('modal').hidden = true; $('sheet').innerHTML = ''; }
+  function openModal(html, wide, lock) {
+    $('sheet').className = 'sheet' + (wide ? ' wide' : ''); modalLock = !!lock;
+    $('sheet').innerHTML = html; $('modal').hidden = false;
+    var b = $('sheet').querySelector('[autofocus]') || $('sheet').querySelector('button'); if (b) b.focus({ preventScroll: true });
+  }
+  function closeModal() { modalLock = false; $('modal').hidden = true; $('sheet').innerHTML = ''; }
   $('modal').addEventListener('click', function (e) {
-    if (e.target === $('modal')) return closeModal();
+    if (e.target === $('modal')) { if (!modalLock) closeModal(); return; }
     var b = e.target.closest('[data-act]'); if (!b) return;
     var a = b.dataset.act;
     if (a === 'close') closeModal();
-    else if (a === 'ch') { mode = { kind: 'challenge', ch: S.CHALLENGES.find(function (c) { return c.id === b.dataset.id; }), env: mode.env, track: mode.track }; closeModal(); loadMode(); }
+    else if (a === 'ch') { var pick = findCh(b.dataset.id); if (!pick || !unlocked(pick.week)) return; mode = { kind: 'challenge', ch: pick, env: mode.env, track: mode.track }; closeModal(); loadMode(); }
     else if (a === 'next') { var nx = nextChallenge(mode.ch); closeModal(); if (nx) { mode.ch = nx; loadMode(); } }
     else if (a === 'quiz') showQuiz(Number(b.dataset.week));
     else if (a === 'opt') answer(b);
@@ -1282,19 +1374,23 @@ textarea.share { width: 100%; height: 130px; font-family: var(--mono); font-size
     else if (a === 'copy') copyShare(b);
     else if (a === 'open') $('file').click();
     else if (a === 'paste') pasteLoad();
+    else cloudAct(a, b);
   });
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('modal').hidden) closeModal(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('modal').hidden && !modalLock) closeModal(); });
   var head = function (t) { return '<div class="sheet-head"><h2>' + t + '</h2><button class="btn small x" data-act="close" type="button">Close</button></div>'; };
 
+  function chBtn(c, open) {
+    var d = store.done[c.id];
+    return '<button class="ch" data-act="ch" data-id="' + c.id + '" type="button"' + (open ? '' : ' disabled') + '><span class="tag ' + c.level + '">' + c.level + '</span><strong>' + esc(c.title) + '</strong><span class="stars">' + starHtml(d ? d.stars : 0) + '</span></button>';
+  }
   function showWeeks() {
     var h = head('Challenges');
+    if (customs.length) h += '<div class="week"><h3>From your teacher</h3><div class="chs">' + customs.map(function (c) { return chBtn(c, true); }).join('') + '</div></div>';
     Object.keys(WEEKS).forEach(function (w) {
-      var q = store.quiz[w];
-      h += '<div class="week"><h3>Week ' + w + ' <span>' + WEEKS[w] + '</span><button class="btn small" data-act="quiz" data-week="' + w + '" type="button">Quiz' + (q !== undefined ? ' ' + q + '/3' : '') + '</button></h3><div class="chs">';
-      S.CHALLENGES.filter(function (c) { return c.week === Number(w); }).forEach(function (c) {
-        var d = store.done[c.id];
-        h += '<button class="ch" data-act="ch" data-id="' + c.id + '" type="button"><span class="tag ' + c.level + '">' + c.level + '</span><strong>' + esc(c.title) + '</strong><span class="stars">' + starHtml(d ? d.stars : 0) + '</span></button>';
-      });
+      var q = store.quiz[w], open = unlocked(Number(w));
+      h += '<div class="week"><h3>Week ' + w + ' <span>' + WEEKS[w] + '</span>' + (open ? '<button class="btn small" data-act="quiz" data-week="' + w + '" type="button">Quiz' + (q !== undefined ? ' ' + q + '/3' : '') + '</button>' :
+        '<span class="tag">Locked: your teacher opens this week after the lesson</span>') + '</h3><div class="chs">';
+      S.CHALLENGES.filter(function (c) { return c.week === Number(w); }).forEach(function (c) { h += chBtn(c, open); });
       h += '</div></div>';
     });
     openModal(h);
@@ -1324,7 +1420,7 @@ textarea.share { width: 100%; height: 130px; font-family: var(--mono); font-size
     if (quizState.answered === 3) {
       var prev = store.quiz[quizState.week];
       if (prev === undefined || quizState.right > prev) store.quiz[quizState.week] = quizState.right;
-      persist(); $('pts').textContent = points();
+      persist(true); $('pts').textContent = points();
       $('quizOut').textContent = 'You scored ' + quizState.right + ' of 3.' + (quizState.right === 3 ? ' Full marks!' : ' Open the quiz again to improve.');
     }
   }
@@ -1333,9 +1429,9 @@ textarea.share { width: 100%; height: 130px; font-family: var(--mono); font-size
   }
   function showShare() {
     openModal(head('Save / Share') +
-      '<p>Your programs and progress save automatically in this browser. To hand a program to your teacher, download it or copy the code.</p>' +
+      '<p>' + (user && user.role === 'student' ? 'Your programs and progress save automatically to your account, so you can continue on any laptop.' : 'Your programs and progress save automatically in this browser. To hand a program to your teacher, download it or copy the code.') + '</p>' +
       '<label class="field" for="stName">Your name<input id="stName" type="text" maxlength="60" value="' + esc(store.name || '') + '" autocomplete="name"></label>' +
-      '<div class="row"><button class="btn primary" data-act="download" type="button">Download program file</button><button class="btn" data-act="copy" type="button">Copy program code</button><button class="btn" data-act="open" type="button">Open a program file</button></div>' +
+      '<div class="row"><button class="btn primary" data-act="download" type="button">Download program file</button><button class="btn" data-act="copy" type="button">Copy program code</button><button class="btn" data-act="open" type="button">Open a program file</button>' + (user && user.role === 'student' ? '<button class="btn primary" data-act="send" type="button">Send to my teacher</button>' : '') + '</div>' +
       '<label class="field" for="shareBox">Program code (paste a code here and press Load to open it)<textarea class="share" id="shareBox" spellcheck="false">' + esc(shareData()) + '</textarea></label>' +
       '<div class="row"><button class="btn" data-act="paste" type="button">Load code from the box</button><strong id="shareOut"></strong></div>');
     $('stName').addEventListener('input', function () { store.name = this.value.trim(); persist(); $('shareBox').value = shareData(); });
@@ -1357,7 +1453,7 @@ textarea.share { width: 100%; height: 130px; font-family: var(--mono); font-size
   function openData(text) {
     var o = JSON.parse(text), prog = o.program || o;
     if (!prog || !prog.blocks) throw new Error('bad');
-    var ch = S.CHALLENGES.find(function (c) { return c.id === o.challenge; });
+    var ch = findCh(o.challenge); if (ch && !unlocked(ch.week)) ch = null;
     if (ch) { mode = { kind: 'challenge', ch: ch, env: mode.env, track: mode.track }; loadMode(true); }
     else if (o.challenge === 'free' && mode.kind !== 'free') { mode.kind = 'free'; loadMode(true); }
     loadProgram(prog); saveProgram();
@@ -1443,19 +1539,529 @@ textarea.share { width: 100%; height: 130px; font-family: var(--mono); font-size
     });
     if (window.ResizeObserver) new ResizeObserver(function () { Blockly.svgResize(ws); }).observe($('blockly'));
     window.addEventListener('resize', function () { Blockly.svgResize(ws); });
-    var last = store.last && S.CHALLENGES.find(function (c) { return c.id === store.last; });
+    var last = !cloud && !user && store.last && findCh(store.last);
     if (last) mode = { kind: 'challenge', ch: last, env: 'open', track: 'oval' };
     loadMode();
-    if (!last && !Object.keys(store.done).length) showWeeks();
+    if (!cloud && !user && !last && !Object.keys(store.done).length && $('modal').hidden) showWeeks();
   }
   function start() {
     $('speedOut').textContent = SPEEDS[Number($('speed').value)] + 'x';
-    loadMode(); setButtons(); requestAnimationFrame(frame);
+    loadMode(); setButtons(); requestAnimationFrame(frame); initBackend();
     if (window.Blockly) return boot();
     var s = document.createElement('script');
     s.src = 'https://cdn.jsdelivr.net/npm/blockly@11.1.1/blockly.min.js';
     s.onload = boot; s.onerror = boot; document.head.appendChild(s);
   }
+  /* ---------- accounts, classes and the teacher dashboard ---------- */
+  var DOMAIN = '@mbotsim.example.com', FBV = 'https://www.gstatic.com/firebasejs/10.12.2/firebase-';
+  var PW_WORDS = ['robot', 'motor', 'wheel', 'laser', 'pixel', 'rocket', 'sensor', 'buzzer', 'falcon', 'comet', 'turbo', 'orbit'];
+  var noop = function () { };
+  function copyObj(o) { return JSON.parse(JSON.stringify(o)); }
+  function makePassword() { return PW_WORDS[Math.floor(Math.random() * PW_WORDS.length)] + (100 + Math.floor(Math.random() * 900)); }
+  function newStudentDoc(d) {
+    return { name: d.name, username: d.username, password: d.password, group: d.group, extraWeeks: [], blocked: false,
+      done: {}, quiz: {}, programs: {}, tries: {}, submitted: {}, created: Date.now(), lastSeen: 0 };
+  }
+
+  /* Demo backend: same interface as Firebase, stored in this browser only. */
+  function LocalBE() {
+    var K = 'mbotsim.demo.v1', db = null;
+    try { db = JSON.parse(localStorage.getItem(K)); } catch (e) { }
+    if (!db || !db.groups) {
+      db = { groups: { demo: { name: 'Example class', weeks: [2, 3], created: 1 } }, students: {}, assignments: {} };
+      [['Example Student A', { w2a: 3, w2b: 3, w2c: 2, w3a: 3 }, { w3b: 2 }], ['Example Student B', { w2a: 3, w2b: 1 }, { w2c: 6, w3a: 5 }], ['Example Student C', {}, {}]].forEach(function (e, i) {
+        var s = newStudentDoc({ name: e[0], username: 'example-0' + (i + 1), password: 'robot' + (i + 1) + '23', group: 'demo' }), k;
+        for (k in e[1]) { s.done[k] = { stars: e[1][k], blocks: 4, at: Date.now() }; s.tries[k] = { r: 2, f: 1 }; }
+        for (k in e[2]) s.tries[k] = { r: e[2][k] + 1, f: e[2][k] };
+        if (i < 2) s.lastSeen = Date.now();
+        db.students['ex' + i] = s;
+      });
+    }
+    function save() { try { localStorage.setItem(K, JSON.stringify(db)); } catch (e) { } }
+    function ok(v) { return Promise.resolve(v == null ? v : copyObj(v)); }
+    function rows(col, test) {
+      return Object.keys(db[col]).map(function (id) { var o = copyObj(db[col][id]); o.id = id; return o; }).filter(test || function () { return true; });
+    }
+    function put(col, id, d) { id = id || Math.random().toString(36).slice(2, 10); var o = copyObj(d); delete o.id; db[col][id] = o; save(); return Promise.resolve(id); }
+    return {
+      restore: function () { return ok(null); },
+      verifyTeacher: function () { return ok(true); },
+      signInStudent: function (u, p) { var s = rows('students', function (x) { return x.username === u; })[0]; return s && s.password === p ? ok(s) : Promise.reject({ code: 'auth/invalid-credential' }); },
+      signInTeacher: function () { return ok(true); },
+      signOut: function () { return ok(); },
+      getStudent: function (id) { return ok(rows('students', function (x) { return x.id === id; })[0] || null); },
+      updateStudent: function (id, patch) {
+        if (!db.students[id]) return Promise.reject({ code: 'not-found' });
+        for (var k in patch) db.students[id][k] = copyObj(patch[k]);
+        save(); return ok();
+      },
+      getGroup: function (id) { return ok(rows('groups', function (x) { return x.id === id; })[0] || null); },
+      listGroups: function () { return ok(rows('groups')); },
+      saveGroup: function (id, d) { return put('groups', id, d); },
+      deleteGroup: function (id) { delete db.groups[id]; save(); return ok(); },
+      listStudents: function (gid) { return ok(rows('students', function (x) { return x.group === gid; })); },
+      createStudent: function (d) {
+        if (rows('students', function (x) { return x.username === d.username; }).length) return Promise.reject(new Error('taken'));
+        var doc = newStudentDoc(d);
+        return put('students', null, doc).then(function (id) { doc.id = id; return doc; });
+      },
+      setPassword: function (st, pw) { db.students[st.id].password = pw; save(); return ok(); },
+      removeStudent: function (st) { delete db.students[st.id]; save(); return ok(); },
+      listAssignments: function (gid) { return ok(rows('assignments', function (x) { return !gid || (x.groups || []).indexOf(gid) >= 0; })); },
+      saveAssignment: function (id, d) { return put('assignments', id, d); },
+      deleteAssignment: function (id) { delete db.assignments[id]; save(); return ok(); }
+    };
+  }
+
+  /* Firebase backend: Auth (email/password) + Firestore. Students sign in as username@mbotsim.example.com. */
+  function FirebaseBE(fb) {
+    var app = fb.initializeApp(CFG), auth = app.auth(), db = app.firestore(), second = null;
+    function col(n) { return db.collection(n); }
+    function rowsOf(q) { return q.get().then(function (s) { return s.docs.map(function (d) { var o = d.data(); o.id = d.id; return o; }); }); }
+    function one(ref) { return ref.get().then(function (d) { if (!d.exists) return null; var o = d.data(); o.id = d.id; return o; }); }
+    function acct() { if (!second) second = fb.initializeApp(CFG, 'accounts'); return second.auth(); }
+    function put(n, id, d) { var ref = id ? col(n).doc(id) : col(n).doc(), o = copyObj(d); delete o.id; return ref.set(o).then(function () { return ref.id; }); }
+    function isStudent(u) { return !!u.email && u.email.slice(-DOMAIN.length) === DOMAIN; }
+    function checkTeacher() { return col('students').limit(1).get(); }   // only the teacher may list students
+    return {
+      restore: function () {
+        return new Promise(function (res) {
+          var off = auth.onAuthStateChanged(function (u) { if (off) off(); res(u ? { role: isStudent(u) ? 'student' : 'teacher', uid: u.uid } : null); });
+        });
+      },
+      verifyTeacher: checkTeacher,
+      signInStudent: function (u, p) { return auth.signInWithEmailAndPassword(u + DOMAIN, p).then(function (c) { return one(col('students').doc(c.user.uid)); }); },
+      signInTeacher: function (e, p) {
+        return auth.signInWithEmailAndPassword(e, p).then(function () {
+          return checkTeacher().catch(function () { return auth.signOut().then(function () { throw { code: 'not-teacher' }; }); });
+        });
+      },
+      signOut: function () { return auth.signOut(); },
+      getStudent: function (id) { return one(col('students').doc(id)); },
+      updateStudent: function (id, patch) { return col('students').doc(id).update(patch); },
+      getGroup: function (id) { return one(col('groups').doc(id)); },
+      listGroups: function () { return rowsOf(col('groups')); },
+      saveGroup: function (id, d) { return put('groups', id, d); },
+      deleteGroup: function (id) { return col('groups').doc(id).delete(); },
+      listStudents: function (gid) { return rowsOf(col('students').where('group', '==', gid)); },
+      createStudent: function (d) {
+        var a = acct();
+        return a.createUserWithEmailAndPassword(d.username + DOMAIN, d.password).then(function (c) {
+          var uid = c.user.uid, doc = newStudentDoc(d);
+          return a.signOut().then(function () { return col('students').doc(uid).set(doc); }).then(function () { doc.id = uid; return doc; });
+        }, function (e) { throw (e && e.code === 'auth/email-already-in-use') ? new Error('taken') : e; });
+      },
+      setPassword: function (st, pw) {
+        var a = acct();
+        return a.signInWithEmailAndPassword(st.username + DOMAIN, st.password).then(function (c) { return c.user.updatePassword(pw); })
+          .then(function () { return a.signOut(); }).then(function () { return col('students').doc(st.id).update({ password: pw }); });
+      },
+      removeStudent: function (st) {
+        var a = acct();
+        return a.signInWithEmailAndPassword(st.username + DOMAIN, st.password).then(function (c) { return c.user.delete(); }).catch(noop)
+          .then(function () { return col('students').doc(st.id).delete(); });
+      },
+      listAssignments: function (gid) { return rowsOf(gid ? col('assignments').where('groups', 'array-contains', gid) : col('assignments')); },
+      saveAssignment: function (id, d) { return put('assignments', id, d); },
+      deleteAssignment: function (id) { return col('assignments').doc(id).delete(); }
+    };
+  }
+
+  /* ---------- logging in and out ---------- */
+  function loadScripts(names) {
+    return names.reduce(function (p, n) {
+      return p.then(function () {
+        return new Promise(function (res, rej) {
+          var s = document.createElement('script'); s.src = FBV + n + '-compat.js';
+          s.onload = function () { res(); }; s.onerror = function () { rej({ code: 'net' }); };
+          document.head.appendChild(s);
+        });
+      });
+    }, Promise.resolve());
+  }
+  function initBackend() {
+    if (!cloud) { be = LocalBE(); updateAuthUI(); return; }
+    showLogin('Connecting to your class...');
+    loadScripts(['app', 'auth', 'firestore']).then(function () { be = FirebaseBE(window.firebase); return be.restore(); }).then(function (r) {
+      if (!r) return showLogin();
+      if (r.role === 'teacher') return be.verifyTeacher().then(enterTeacher, function () { return be.signOut().then(function () { showLogin(); }); });
+      return be.getStudent(r.uid).then(enterStudent);
+    }).catch(function () { showLogin('Could not connect to the class server. Check your internet connection, then reload this page.'); });
+  }
+  function authMsg(e) {
+    var c = (e && e.code) || '';
+    if (/wrong-password|user-not-found|invalid-credential|invalid-login|invalid-email/.test(c)) return 'Wrong username or password. Check the spelling and try again.';
+    if (/network|net$/.test(c)) return 'No internet connection. Check your Wi-Fi and try again.';
+    if (/too-many/.test(c)) return 'Too many tries. Wait a minute, then try again.';
+    if (c === 'not-teacher') return 'This is not the teacher account.';
+    return 'Could not log in' + (c ? ' (' + c + ')' : '') + '. Try again.';
+  }
+  function showLogin(msg, teacher) {
+    var demo = !cloud;
+    var h = '<div class="sheet-head"><h2>' + (teacher ? 'Teacher log in' : 'Log in') + '</h2>' + (demo ? '<button class="btn small x" data-act="close" type="button">Close</button>' : '') + '</div>';
+    if (demo) h += '<p class="demo">Demo mode: classes and accounts here are stored only in this browser. They become real once the site is connected to Firebase.</p>';
+    if (teacher && demo) h += '<div class="row"><button class="btn primary" data-act="demoTeacher" type="button">Open the teacher dashboard</button></div>';
+    else h += '<form id="loginForm" class="login">' + (teacher ? '' : '<p>Type the username and password your teacher gave you.</p>') +
+      '<label class="field" for="lgUser">' + (teacher ? 'Email' : 'Username') + '<input id="lgUser" type="' + (teacher ? 'email' : 'text') + '" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus></label>' +
+      '<label class="field" for="lgPass">Password<input id="lgPass" type="password" autocomplete="current-password" required></label>' +
+      '<div class="row"><button class="btn primary" type="submit">Log in</button><strong id="lgOut" role="alert">' + esc(msg || '') + '</strong></div></form>';
+    h += '<div class="row"><button class="btn small" data-act="' + (teacher ? 'studentLogin' : 'teacherLogin') + '" type="button">' + (teacher ? 'I am a student' : 'I am the teacher') + '</button></div>';
+    openModal(h, false, cloud);
+    var f = $('loginForm'); if (!f) return;
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!be) { $('lgOut').textContent = 'Still connecting. Try again in a moment.'; return; }
+      var u = $('lgUser').value.trim(), p = $('lgPass').value;
+      $('lgOut').textContent = 'Checking...';
+      var job = teacher ? be.signInTeacher(u, p).then(enterTeacher) : be.signInStudent(u.toLowerCase(), p).then(enterStudent);
+      job.catch(function (e2) { if ($('lgOut')) $('lgOut').textContent = authMsg(e2); });
+    });
+  }
+  function freshMode() { return { kind: 'free', env: 'open', track: 'oval' }; }
+  function enterStudent(p) {
+    if (!p || p.blocked) return be.signOut().then(function () { showLogin(p ? 'Your account is paused. Ask your teacher.' : 'This account is not ready yet. Ask your teacher.'); });
+    return Promise.all([p.group ? be.getGroup(p.group) : null, be.listAssignments(p.group || 'none')]).then(function (r) {
+      user = { role: 'student', uid: p.id, profile: p, group: r[0] };
+      customs = r[1].map(toChallenge);
+      store = blankStore(); store.name = p.name; store.done = p.done || {}; store.quiz = p.quiz || {}; store.tries = p.tries || {}; store.submitted = p.submitted || {};
+      for (var k in (p.programs || {})) { try { store.programs[k] = JSON.parse(p.programs[k]); } catch (e) { } }
+      mode = freshMode(); dirty = false;
+      closeModal(); updateAuthUI(); loadMode(); showWeeks();
+      be.updateStudent(p.id, { lastSeen: Date.now() }).catch(noop);
+    });
+  }
+  function enterTeacher() {
+    user = { role: 'teacher' }; store = blankStore(); mode = freshMode();
+    closeModal(); updateAuthUI(); loadMode();
+    return openDash();
+  }
+  function logout() {
+    var after = function () {
+      user = null; customs = []; dirty = false; store = cloud ? blankStore() : localStore(); mode = freshMode();
+      closeModal(); updateAuthUI(); loadMode();
+      if (cloud) showLogin();
+    };
+    push().then(function () { return be.signOut(); }).then(after, after);
+  }
+  function updateAuthUI() {
+    $('btnDash').hidden = !(user && user.role === 'teacher');
+    $('btnAuth').hidden = cloud && !user;
+    $('btnAuth').textContent = user ? 'Log out' + (user.role === 'student' ? ' (' + String(user.profile.name).split(' ')[0] + ')' : '') : 'Log in (demo)';
+    $('btnSend').hidden = !(user && user.role === 'student');
+    $('pts').textContent = points();
+  }
+  function sendToTeacher() {
+    if (!user || user.role !== 'student' || !ws) return;
+    var key = modeKey(), prog = getProgram();
+    store.submitted[key] = { p: JSON.stringify(prog), at: Date.now() };
+    if (mode.kind === 'challenge' && mode.ch.review && !store.done[key]) store.done[key] = { stars: 3, blocks: S.countBlocks(prog), at: Date.now(), sent: true };
+    persist(true); $('pts').textContent = points();
+    coach('Sent to your teacher.', 'good');
+  }
+
+  /* ---------- teacher-made assignments become challenges ---------- */
+  function toChallenge(a) {
+    var spec = copyObj(S.ENVS[a.env] || S.ENVS.open), rule = a.rule || 'review', nb = rule === 'distance' || !!a.noBumps;
+    if (a.env === 'line') spec.track = a.track || 'oval';
+    var ch = { id: 'a_' + a.id, week: 0, custom: true, level: a.level || 'Intermediate', title: a.title || 'Assignment', desc: a.desc || '', par: 999,
+      hints: [a.hint || 'Build one small step, press Run, then add the next step.'], cats: a.cats && a.cats.length ? a.cats : ALL_CATS, world: spec };
+    var still = 'Your robot is not moving! Check that a movement block from Action is snapped under the start block.';
+    if (rule === 'zone') {
+      if (a.env !== 'maze') spec.zones = [{ id: 'goal', x: Number(a.zx) || 100, y: Number(a.zy) || 40, r: 12, label: 'GOAL' }];
+      ch.goal = 'Drive to the ' + (a.env === 'maze' ? 'FINISH' : 'GOAL') + ' zone and stop inside it' + (nb ? ' without bumping into anything.' : '.');
+      ch.check = function (st, w) { var z = w.zones[0], r = w.robot; return Math.hypot(r.x - z.x, r.y - z.y) <= z.r && r.still > 0.5 && (!nb || !r.bumps); };
+      ch.why = function (st, w) {
+        return w.robot.odo < 1 ? still : nb && w.robot.bumps ? 'The robot bumped into something. Change your route and try again.' : 'The robot did not stop inside the zone. Check your distances and turns.';
+      };
+    } else if (rule === 'distance') {
+      var cmGoal = Number(a.cm) || 200;
+      ch.goal = 'Travel ' + cmGoal + ' cm without bumping into anything.';
+      ch.check = function (st, w) { return w.robot.odo >= cmGoal && !w.robot.bumps; };
+      ch.why = function (st, w) {
+        return w.robot.odo < 1 ? still : w.robot.bumps ? 'Bump! The robot hit something after ' + Math.round(w.robot.odo) + ' cm.' : 'The robot travelled ' + Math.round(w.robot.odo) + ' cm. It needs ' + cmGoal + ' cm.';
+      };
+    } else {
+      ch.review = true; ch.goal = 'Build and test your program, then press "Send to teacher".';
+      ch.check = function () { return false; };
+    }
+    if (nb && !ch.review) ch.fail = function (st, w) { return w.robot.bumps > 0; };
+    return ch;
+  }
+
+  /* ---------- teacher dashboard ---------- */
+  var dash = { tab: 'classes', gid: null, groups: [], students: [], assigns: [], view: null, note: '', arm: '', out: '' };
+  function byName(a, b) { return String(a.name).localeCompare(String(b.name), undefined, { numeric: true }); }
+  function loadDash() {
+    return Promise.all([be.listGroups(), be.listAssignments()]).then(function (r) {
+      dash.groups = r[0].sort(byName);
+      dash.assigns = r[1].sort(function (a, b) { return (b.created || 0) - (a.created || 0); });
+      customs = dash.assigns.map(toChallenge);
+      if (!dash.groups.some(function (g) { return g.id === dash.gid; })) dash.gid = dash.groups.length ? dash.groups[0].id : null;
+      return dash.gid ? be.listStudents(dash.gid) : [];
+    }).then(function (s) { dash.students = s.sort(function (a, b) { return String(a.username).localeCompare(String(b.username), undefined, { numeric: true }); }); });
+  }
+  function dashFail(e) {
+    var c = e && (e.code || e.message);
+    dash.note = 'That did not work' + (c ? ' (' + c + ')' : '') + '. Check your connection and try again.';
+    renderDash();
+  }
+  function openDash() { dash.note = ''; dash.view = null; dash.out = ''; return loadDash().then(renderDash, dashFail); }
+  function reload(note) { if (note !== undefined) dash.note = note; return loadDash().then(renderDash, dashFail); }
+  function say(msg) { dash.note = msg; var n = $('dashNote'); if (n) n.textContent = msg; }
+  function group() { return dash.groups.filter(function (g) { return g.id === dash.gid; })[0] || null; }
+  function student(id) { return dash.students.filter(function (s) { return s.id === id; })[0] || null; }
+  function ptsOf(s) { return pointsOf(s.done || {}, s.quiz || {}); }
+  function ago(t) {
+    if (!t) return 'never';
+    var d = Math.floor((Date.now() - t) / 86400000);
+    return d <= 0 ? 'today' : d === 1 ? 'yesterday' : d + ' days ago';
+  }
+  function nameBtn(s) { return '<button class="link" data-act="work" data-id="' + s.id + '" type="button">' + esc(s.name) + '</button>'; }
+  function weekBtns(act, id, on, base) {
+    return [2, 3, 4, 5, 6, 7].map(function (w) {
+      var fixed = !!base && base.indexOf(w) >= 0, isOn = fixed || on.indexOf(w) >= 0;
+      return '<button class="wk' + (isOn ? ' on' : '') + (fixed ? ' fixed' : '') + '" data-act="' + act + '" data-id="' + id + '" data-w="' + w + '" type="button" aria-pressed="' + isOn + '"' +
+        (fixed ? ' disabled' : '') + ' title="Week ' + w + ': ' + WEEKS[w] + (fixed ? ' (open for the whole class)' : '') + '">' + w + '</button>';
+    }).join('');
+  }
+  function renderDash() {
+    var sc = $('sheet').scrollTop, g = group(), h = head('Teacher dashboard');
+    if (!cloud) h += '<p class="demo">Demo mode: everything here is stored only in this browser, and the three example students are samples. Connect Firebase to use it with your real classes.</p>';
+    h += '<div class="tabs">' + [['classes', 'Classes and students'], ['progress', 'Progress'], ['insights', 'Insights'], ['assign', 'Assignments']].map(function (t) {
+      return '<button class="btn small' + (dash.tab === t[0] ? ' on' : '') + '" data-act="tab" data-id="' + t[0] + '" type="button">' + t[1] + '</button>';
+    }).join('') + '</div><p class="note" id="dashNote" role="status">' + esc(dash.note) + '</p>';
+    if (dash.out) h += '<label class="field" for="dashOut">Copy this text (Ctrl + A, then Ctrl + C)<textarea class="share" id="dashOut" readonly>' + esc(dash.out) + '</textarea></label>';
+    if (dash.tab !== 'assign') {
+      h += '<div class="row">' + dash.groups.map(function (x) {
+        return '<button class="btn small' + (x.id === dash.gid ? ' on' : '') + '" data-act="pick" data-id="' + x.id + '" type="button">' + esc(x.name) + '</button>';
+      }).join('') + (dash.tab === 'classes' ? '<input id="newGroup" type="text" maxlength="30" placeholder="New class name, e.g. 7A" aria-label="New class name"><button class="btn small primary" data-act="addGroup" type="button">Add class</button>' : '') + '</div>';
+    }
+    if (dash.view && student(dash.view)) h += workHtml(student(dash.view));
+    else if (dash.tab === 'assign') h += assignHtml();
+    else if (!g) h += '<p>No classes yet. ' + (dash.tab === 'classes' ? 'Type a class name above and press "Add class".' : 'Add one under "Classes and students".') + '</p>';
+    else if (dash.tab === 'classes') h += classHtml(g);
+    else if (dash.tab === 'progress') h += progressHtml();
+    else h += insightsHtml(g);
+    openModal(h, true, false);
+    $('sheet').scrollTop = sc;
+  }
+  function classHtml(g) {
+    var st = dash.students;
+    var h = '<div class="week"><h3>' + esc(g.name) + ' <span>' + st.length + ' student' + (st.length === 1 ? '' : 's') + '</span></h3>' +
+      '<div class="row"><strong>Unlocked weeks</strong><span>' + weekBtns('gwk', g.id, g.weeks || []) + '</span>' +
+      '<button class="btn small" data-act="delGroup" data-id="' + g.id + '" type="button">' + (dash.arm === 'g' + g.id ? 'Press again to delete' : 'Delete class') + '</button></div></div>';
+    h += '<div class="week"><h3>Students</h3>';
+    if (st.length) {
+      h += '<div class="tblwrap"><table class="tbl"><thead><tr><th>Name</th><th>Username</th><th>Password</th><th>Points</th><th>Done</th><th>Last seen</th><th>Extra weeks</th><th>Actions</th></tr></thead><tbody>' +
+        st.map(function (s) {
+          return '<tr' + (s.blocked ? ' class="off"' : '') + '><td>' + nameBtn(s) + '</td><td class="mono">' + esc(s.username) + '</td><td class="mono">' + esc(s.password) + '</td><td class="num">' + ptsOf(s) +
+            '</td><td class="num">' + Object.keys(s.done || {}).length + '</td><td>' + (s.blocked ? 'paused' : ago(s.lastSeen)) + '</td><td>' + weekBtns('swk', s.id, s.extraWeeks || [], g.weeks || []) + '</td><td><div class="acts">' +
+            '<button class="btn small" data-act="newPw" data-id="' + s.id + '" type="button">New password</button>' +
+            '<button class="btn small" data-act="block" data-id="' + s.id + '" type="button">' + (s.blocked ? 'Unpause' : 'Pause') + '</button>' +
+            '<button class="btn small" data-act="delStudent" data-id="' + s.id + '" type="button">' + (dash.arm === 's' + s.id ? 'Press again' : 'Remove') + '</button></div></td></tr>';
+        }).join('') + '</tbody></table></div>' +
+        '<div class="row"><button class="btn small" data-act="copyLogins" type="button">Copy login list</button><button class="btn small" data-act="copyResults" type="button">Copy results for Excel</button></div>';
+    } else h += '<p>No students in this class yet.</p>';
+    h += '<label class="field" for="newNames">Add students: one name per line<textarea class="share names" id="newNames" placeholder="First student&#10;Second student"></textarea></label>' +
+      '<div class="row"><button class="btn primary" data-act="addStudents" type="button">Create accounts</button></div></div>';
+    return h;
+  }
+  function progressHtml() {
+    var cs = S.CHALLENGES.concat(customs), st = dash.students.slice().sort(function (a, b) { return ptsOf(b) - ptsOf(a); });
+    if (!st.length) return '<p>No students in this class yet.</p>';
+    return '<p>Sorted by points. A number is the stars earned (1 to 3). A dot means the student tried but has not solved it yet.</p><div class="tblwrap"><table class="tbl grid"><thead><tr><th>Student</th><th>Pts</th>' +
+      cs.map(function (c) { return '<th>' + (c.custom ? 'Task' : 'Week ' + c.week) + '<small>' + esc(c.title) + '</small></th>'; }).join('') + '<th>Quizzes</th></tr></thead><tbody>' +
+      st.map(function (s) {
+        var d = s.done || {}, t = s.tries || {}, q = s.quiz || {};
+        return '<tr><td>' + nameBtn(s) + '</td><td class="num">' + ptsOf(s) + '</td>' + cs.map(function (c) {
+          return '<td class="cell' + (d[c.id] ? ' s' + d[c.id].stars : '') + '">' + (d[c.id] ? d[c.id].stars + '★' : t[c.id] ? '·' : '') + '</td>';
+        }).join('') + '<td>' + (Object.keys(q).map(function (w) { return 'W' + w + ' ' + q[w] + '/3'; }).join(', ') || '') + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+  function insightsHtml(g) {
+    var st = dash.students, n = st.length, body = '', hard = [];
+    if (!n) return '<p>No students in this class yet.</p>';
+    Object.keys(WEEKS).forEach(function (w) {
+      var cs = S.CHALLENGES.filter(function (c) { return c.week === Number(w); }), done = 0, fails = 0, tried = 0, stuck = 0;
+      cs.forEach(function (c) {
+        var cd = 0, cf = 0, ct = 0, cst = 0;
+        st.forEach(function (s) {
+          var t = (s.tries || {})[c.id], d = (s.done || {})[c.id];
+          if (d) cd++;
+          if (t) { ct++; cf += t.f || 0; if (!d) cst++; }
+        });
+        done += cd; fails += cf; tried += ct; stuck += cst;
+        if (ct) hard.push({ c: c, avg: cf / ct, stuck: cst });
+      });
+      var pct = Math.round(done / (n * cs.length) * 100), avg = tried ? fails / tried : 0, open = (g.weeks || []).indexOf(Number(w)) >= 0;
+      var flag = !tried ? (open ? 'Not started' : 'Locked') : (avg >= 4 || stuck * 2 > tried) ? 'Needs attention' : 'On track';
+      body += '<tr><td>Week ' + w + '</td><td>' + WEEKS[w] + '</td><td><span class="bar"><i style="width:' + pct + '%"></i></span>' + pct + '%</td><td class="num">' + (tried ? avg.toFixed(1) : '') +
+        '</td><td class="flag' + (flag === 'Needs attention' ? ' bad' : flag === 'On track' ? ' ok' : '') + '">' + flag + '</td></tr>';
+    });
+    hard = hard.filter(function (x) { return x.avg >= 1 || x.stuck; }).sort(function (a, b) { return (b.avg + b.stuck) - (a.avg + a.stuck); }).slice(0, 3);
+    return '<div class="tblwrap"><table class="tbl"><thead><tr><th>Week</th><th>Concept</th><th>Challenges completed</th><th>Failed runs per try</th><th>Status</th></tr></thead><tbody>' + body + '</tbody></table></div>' +
+      '<p>"Failed runs per try" is the average number of unsuccessful runs for each student on each challenge they attempted. "Needs attention" appears when that average reaches 4, or when more than half of the attempts are still unsolved.</p>' +
+      (hard.length ? '<div class="week"><h3>Hardest challenges for this class</h3><ul>' + hard.map(function (x) {
+        return '<li><strong>' + esc(x.c.title) + '</strong> (Week ' + x.c.week + ', ' + WEEKS[x.c.week] + '): ' + x.avg.toFixed(1) + ' failed runs on average, ' + x.stuck + ' student' + (x.stuck === 1 ? '' : 's') + ' not solved yet</li>';
+      }).join('') + '</ul></div>' : '');
+  }
+  function workHtml(s) {
+    var sub = s.submitted || {}, keys = Object.keys(sub).sort(function (a, b) { return (sub[b].at || 0) - (sub[a].at || 0); });
+    var h = '<div class="week"><h3>' + esc(s.name) + ' <span>' + ptsOf(s) + ' points</span><button class="btn small" data-act="back" type="button">Back to class</button></h3>';
+    if (!keys.length) return h + '<p>No programs yet. A program arrives here when the student completes a challenge or presses "Send to teacher".</p></div>';
+    return h + '<div class="tblwrap"><table class="tbl"><thead><tr><th>Program</th><th>Received</th><th>Result</th><th>Review</th></tr></thead><tbody>' + keys.map(function (k) {
+      var c = findCh(k), d = (s.done || {})[k];
+      return '<tr><td>' + esc(c ? (c.custom ? 'Assignment: ' : 'Week ' + c.week + ': ') + c.title : k === 'free' ? 'Free play' : 'Deleted assignment') + '</td><td>' + ago(sub[k].at) + '</td><td>' +
+        (sub[k].ok && d ? 'Solved, ' + d.stars + ' of 3 stars' : 'Sent for review') + '</td><td><button class="btn small primary" data-act="openWork" data-id="' + s.id + '" data-k="' + esc(k) + '" type="button">Open in simulator</button></td></tr>';
+    }).join('') + '</tbody></table></div></div>';
+  }
+  function assignHtml() {
+    var names = {}; dash.groups.forEach(function (g) { names[g.id] = g.name; });
+    var opt = function (list) { return list.map(function (o) { return '<option value="' + o[0] + '">' + o[1] + '</option>'; }).join(''); };
+    var h = '<div class="week"><h3>Your assignments</h3>';
+    if (!dash.assigns.length) h += '<p>No assignments yet. Create one below and choose which classes see it.</p>';
+    else h += '<div class="tblwrap"><table class="tbl"><thead><tr><th>Title</th><th>Goal</th><th>Classes</th><th></th></tr></thead><tbody>' + dash.assigns.map(function (a) {
+      return '<tr><td>' + esc(a.title) + '</td><td>' + esc(toChallenge(a).goal) + '</td><td>' + esc((a.groups || []).map(function (id) { return names[id] || 'deleted class'; }).join(', ')) +
+        '</td><td><button class="btn small" data-act="delAssign" data-id="' + a.id + '" type="button">' + (dash.arm === 'a' + a.id ? 'Press again' : 'Delete') + '</button></td></tr>';
+    }).join('') + '</tbody></table></div>';
+    h += '</div><div class="week"><h3>New assignment</h3><div class="form">' +
+      '<label class="field" for="asTitle">Title<input id="asTitle" type="text" maxlength="50"></label>' +
+      '<label class="field" for="asLevel">Level<select id="asLevel">' + opt([['Beginner', 'Beginner (10 points)'], ['Intermediate', 'Intermediate (20 points)'], ['Advanced', 'Advanced (30 points)']]) + '</select></label>' +
+      '<label class="field full" for="asDesc">Instructions for students<textarea class="share names" id="asDesc" maxlength="400"></textarea></label>' +
+      '<label class="field full" for="asHint">Hint (optional)<input id="asHint" type="text" maxlength="200"></label>' +
+      '<label class="field" for="asEnv">Environment<select id="asEnv">' + opt([['open', 'Open Space'], ['obstacles', 'Obstacle Course'], ['line', 'Line-Following Track'], ['maze', 'Maze Challenge']]) + '</select></label>' +
+      '<label class="field" for="asTrack">Track shape (line environment only)<select id="asTrack">' + opt([['oval', 'Oval'], ['rounded', 'Rounded square'], ['wave', 'Wavy line']]) + '</select></label>' +
+      '<label class="field full" for="asRule">How is it completed?<select id="asRule">' + opt([['review', 'The student sends the program and I review it'], ['zone', 'The robot reaches a goal zone and stops inside it'], ['distance', 'The robot travels a distance without bumping']]) + '</select></label>' +
+      '<label class="field" for="asZx">Goal zone: cm from the left (0 to 200)<input id="asZx" type="number" min="15" max="185" value="100"></label>' +
+      '<label class="field" for="asZy">Goal zone: cm from the top (0 to 150)<input id="asZy" type="number" min="15" max="135" value="40"></label>' +
+      '<label class="field" for="asCm">Distance to travel (cm)<input id="asCm" type="number" min="20" max="2000" value="300"></label>' +
+      '<div class="field"><span>Goal zone rule</span><label class="chk" for="asNb"><input id="asNb" type="checkbox"> No bumps allowed</label></div>' +
+      '<div class="field full"><span>Block categories students can use</span><div class="checks">' + ALL_CATS.map(function (c) {
+        return '<label class="chk" for="asCat_' + c + '"><input id="asCat_' + c + '" type="checkbox" checked> ' + CAT_NAMES[c] + '</label>'; }).join('') + '</div></div>' +
+      '<div class="field full"><span>Assign to classes</span><div class="checks">' + (dash.groups.map(function (g) {
+        return '<label class="chk" for="asG_' + g.id + '"><input id="asG_' + g.id + '" type="checkbox"> ' + esc(g.name) + '</label>'; }).join('') || 'Create a class first.') + '</div></div>' +
+      '</div><div class="row"><button class="btn primary" data-act="saveAssign" type="button">Save assignment</button></div></div>';
+    return h;
+  }
+  function addStudents() {
+    var g = group(); if (!g) return;
+    var names = $('newNames').value.split('\n').map(function (x) { return x.trim().slice(0, 60); }).filter(Boolean);
+    if (!names.length) return say('Type at least one student name.');
+    if (names.length > 40) return say('Add at most 40 students at a time.');
+    var n = dash.students.length, made = 0, prefix = (String(g.name).toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 6) || 'class') + '-';
+    function next(i, tries) {
+      if (i >= names.length) return Promise.resolve();
+      n++; say('Creating account ' + (i + 1) + ' of ' + names.length + '...');
+      return be.createStudent({ name: names[i], username: prefix + (n < 10 ? '0' : '') + n, password: makePassword(), group: g.id }).then(function () { made++; return next(i + 1, 0); }, function (e) {
+        if (e && e.message === 'taken' && tries < 80) return next(i, tries + 1);
+        throw e;
+      });
+    }
+    next(0, 0).then(function () {
+      return reload(made + ' account' + (made === 1 ? '' : 's') + ' created. Use "Copy login list" to hand out the usernames and passwords.');
+    }, function (e) {
+      var c = String((e && (e.code || e.message)) || 'unknown error');
+      return reload(made + ' of ' + names.length + ' accounts were created, then it stopped (' + c + ').' +
+        (/operation-not-allowed/.test(c) ? ' Turn on Email/Password sign-in in the Firebase console.' : /too-many|quota/.test(c) ? ' Wait an hour, then add the rest.' : ''));
+    });
+  }
+  function copyOut(text, okMsg) {
+    var fallback = function () { dash.out = text; dash.note = ''; renderDash(); var t = $('dashOut'); if (t) { t.focus(); t.select(); } };
+    try { navigator.clipboard.writeText(text).then(function () { say(okMsg); }, fallback); } catch (e) { fallback(); }
+  }
+  function loginList() {
+    var g = group(), t = 'Class: ' + g.name + '\n' + (cloud ? 'Website: ' + location.origin + location.pathname + '\n' : '') + 'Name\tUsername\tPassword\n';
+    return t + dash.students.map(function (s) { return s.name + '\t' + s.username + '\t' + s.password; }).join('\n');
+  }
+  function resultsTable() {
+    var cs = S.CHALLENGES.concat(customs), wk = Object.keys(WEEKS);
+    var t = ['Name', 'Username', 'Points', 'Completed'].concat(cs.map(function (c) { return (c.custom ? 'Task: ' : 'W' + c.week + ' ') + c.title; }), wk.map(function (w) { return 'Quiz W' + w; })).join('\t') + '\n';
+    return t + dash.students.map(function (s) {
+      var d = s.done || {}, q = s.quiz || {};
+      return [s.name, s.username, ptsOf(s), Object.keys(d).length].concat(cs.map(function (c) { return d[c.id] ? d[c.id].stars : ''; }), wk.map(function (w) { return q[w] === undefined ? '' : q[w]; })).join('\t');
+    }).join('\n');
+  }
+  function openWork(s, k) {
+    var sub = s && (s.submitted || {})[k], prog;
+    if (!sub) return;
+    if (!ws) return say('The coding blocks are still loading. Try again in a moment.');
+    try { prog = JSON.parse(sub.p); } catch (e) { return say('That program could not be opened.'); }
+    var ch = findCh(k);
+    mode = ch ? { kind: 'challenge', ch: ch, env: mode.env, track: mode.track } : { kind: 'free', env: mode.env, track: mode.track };
+    closeModal(); loadMode(true); loadProgram(prog);
+    coach('You are viewing the program from ' + s.name + '. Press Run to test it.');
+  }
+  function saveAssign() {
+    var v = function (i) { return $(i).value.trim(); };
+    var num = function (i, lo, hi, def) { var x = Number(v(i)); return isFinite(x) && v(i) !== '' ? Math.max(lo, Math.min(hi, x)) : def; };
+    var a = { title: v('asTitle').slice(0, 50), desc: v('asDesc').slice(0, 400), hint: v('asHint').slice(0, 200), level: v('asLevel'), env: v('asEnv'), track: v('asTrack'), rule: v('asRule'),
+      zx: num('asZx', 15, 185, 100), zy: num('asZy', 15, 135, 40), cm: num('asCm', 20, 2000, 300), noBumps: $('asNb').checked,
+      cats: ALL_CATS.filter(function (c) { return $('asCat_' + c).checked; }),
+      groups: dash.groups.filter(function (g) { return $('asG_' + g.id).checked; }).map(function (g) { return g.id; }), created: Date.now() };
+    if (!a.title) return say('Give the assignment a title.');
+    if (!a.groups.length) return say('Choose at least one class.');
+    if (a.cats.indexOf('events') < 0) a.cats.unshift('events');
+    if (a.rule === 'zone' && a.env !== 'maze') {
+      var w = S.makeWorld(toChallenge(a).world);
+      if (S.blocked(w, a.zx, a.zy)) return say('The goal zone is on top of an obstacle. Choose another position.');
+      if (Math.hypot(a.zx - w.start.x, a.zy - w.start.y) < 30) return say('The goal zone is too close to where the robot starts. Move it at least 30 cm away.');
+    }
+    be.saveAssignment(null, a).then(function () { return reload('Assignment "' + a.title + '" saved.'); }).catch(dashFail);
+  }
+  function toggle(list, w) { var i = list.indexOf(w); if (i >= 0) list.splice(i, 1); else list.push(w); list.sort(); return list; }
+  function cloudAct(a, b) {
+    var id = b.dataset.id, g, s;
+    if (a === 'teacherLogin') return showLogin('', true);
+    if (a === 'studentLogin') return showLogin();
+    if (a === 'demoTeacher') return void be.signInTeacher().then(enterTeacher);
+    if (a === 'send') { closeModal(); return sendToTeacher(); }
+    if (!user || user.role !== 'teacher') return;
+    if (a !== 'delGroup' && a !== 'delStudent' && a !== 'delAssign') dash.arm = '';
+    g = group();
+    if (a === 'tab') { dash.tab = id; dash.view = null; dash.out = ''; dash.note = ''; renderDash(); }
+    else if (a === 'pick') { dash.gid = id; dash.view = null; dash.out = ''; reload(''); }
+    else if (a === 'back') { dash.view = null; renderDash(); }
+    else if (a === 'work') { dash.view = id; renderDash(); }
+    else if (a === 'addGroup') {
+      var nm = $('newGroup').value.trim();
+      if (!nm) return say('Type a class name first.');
+      if (dash.groups.some(function (x) { return String(x.name).toLowerCase() === nm.toLowerCase(); })) return say('You already have a class with that name.');
+      be.saveGroup(null, { name: nm, weeks: [], created: Date.now() }).then(function (nid) { dash.gid = nid; return reload('Class "' + nm + '" created. All weeks stay locked until you unlock them.'); }).catch(dashFail);
+    }
+    else if (a === 'gwk' && g) { g.weeks = toggle(g.weeks || [], Number(b.dataset.w)); be.saveGroup(g.id, g).then(function () { dash.note = ''; renderDash(); }, dashFail); }
+    else if (a === 'swk' && (s = student(id))) { s.extraWeeks = toggle(s.extraWeeks || [], Number(b.dataset.w)); be.updateStudent(id, { extraWeeks: s.extraWeeks }).then(function () { renderDash(); }, dashFail); }
+    else if (a === 'block' && (s = student(id))) { s.blocked = !s.blocked; be.updateStudent(id, { blocked: s.blocked }).then(function () { renderDash(); }, dashFail); }
+    else if (a === 'newPw' && (s = student(id))) {
+      var pw = makePassword();
+      be.setPassword(s, pw).then(function () { s.password = pw; dash.note = 'New password for ' + s.name + ': ' + pw; renderDash(); }, dashFail);
+    }
+    else if (a === 'delStudent' && (s = student(id))) {
+      if (dash.arm !== 's' + id) { dash.arm = 's' + id; return renderDash(); }
+      dash.arm = '';
+      be.removeStudent(s).then(function () { return reload(s.name + ' was removed.'); }).catch(dashFail);
+    }
+    else if (a === 'delGroup' && g) {
+      if (dash.students.length) return say('Remove the students from this class first.');
+      if (dash.arm !== 'g' + id) { dash.arm = 'g' + id; return renderDash(); }
+      dash.arm = '';
+      be.deleteGroup(id).then(function () { dash.gid = null; return reload('Class deleted.'); }).catch(dashFail);
+    }
+    else if (a === 'delAssign') {
+      if (dash.arm !== 'a' + id) { dash.arm = 'a' + id; return renderDash(); }
+      dash.arm = '';
+      be.deleteAssignment(id).then(function () { return reload('Assignment deleted.'); }).catch(dashFail);
+    }
+    else if (a === 'addStudents') addStudents();
+    else if (a === 'copyLogins' && g) copyOut(loginList(), 'Login list copied. Paste it into Excel or Word to print it.');
+    else if (a === 'copyResults' && g) copyOut(resultsTable(), 'Results copied. Paste them into Excel.');
+    else if (a === 'openWork') openWork(student(id), b.dataset.k);
+    else if (a === 'saveAssign') saveAssign();
+  }
+  $('btnAuth').onclick = function () { if (user) logout(); else showLogin(); };
+  $('btnDash').onclick = function () { openDash(); };
+  $('btnSend').onclick = sendToTeacher;
+  document.addEventListener('visibilitychange', function () { if (document.hidden) push(); });
+
   start();
 })();
 
