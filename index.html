@@ -181,6 +181,9 @@ textarea.names { height: 100px; font-family: var(--body); font-size: .95rem; }
 .ch:disabled:hover { border-color: var(--line); }
 .login { max-width: 380px; }
 .week ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.tbl.rank tr.me td { background: var(--sun); color: var(--on-sun); font-weight: 800; }
+.tbl.rank td:first-child, .tbl.rank th:first-child { width: 70px; }
+.mine { background: var(--panel-2); border: 2px solid var(--line); border-radius: 10px; padding: 8px 10px; }
 /* Blockly chrome */
 .blocklyToolboxDiv { border-right: 2px solid var(--line); }
 .blocklyTreeLabel { font-family: var(--body) !important; font-weight: 800 !important; }
@@ -197,6 +200,7 @@ textarea.names { height: 100px; font-family: var(--body); font-size: .95rem; }
   <button class="pill sun" id="btnWeeks" type="button">Challenges</button>
   <button class="pill" id="btnFree" type="button">Free play</button>
   <button class="pill" id="btnBadges" type="button">Badges</button>
+  <button class="pill" id="btnRank" type="button" hidden>Ranking</button>
   <button class="pill" id="btnShare" type="button">Save / Share</button>
   <span class="pill pts" title="Your points">&#9733; <span id="pts">0</span> pts</span>
   <button class="pill sun" id="btnDash" type="button" hidden>Teacher dashboard</button>
@@ -1081,8 +1085,8 @@ window.MBOT_FIREBASE_CONFIG = {
     dirty = false;
     var progs = {}, k;
     for (k in store.programs) progs[k] = JSON.stringify(store.programs[k]);
-    return be.updateStudent(user.uid, { done: store.done, quiz: store.quiz, programs: progs, tries: store.tries, submitted: store.submitted, lastSeen: Date.now() })
-      .catch(function () { dirty = true; });
+    return Promise.all([be.updateStudent(user.uid, { done: store.done, quiz: store.quiz, programs: progs, tries: store.tries, submitted: store.submitted, lastSeen: Date.now() })
+      .catch(function () { dirty = true; }), syncScore()]);
   }
   function findCh(id) {
     var all = S.CHALLENGES.concat(customs);
@@ -1609,8 +1613,16 @@ window.MBOT_FIREBASE_CONFIG = {
       removeStudent: function (st) { delete db.students[st.id]; save(); return ok(); },
       listAssignments: function (gid) { return ok(rows('assignments', function (x) { return !gid || (x.groups || []).indexOf(gid) >= 0; })); },
       saveAssignment: function (id, d) { return put('assignments', id, d); },
-      deleteAssignment: function (id) { delete db.assignments[id]; save(); return ok(); }
+      deleteAssignment: function (id) { delete db.assignments[id]; save(); return ok(); },
+      saveScore: function () { return ok(); },   // demo scores are computed from the students directly
+      listScores: function (gid) { return ok(scoreRows(function (x) { return x.group === gid; })); },
+      topScores: function (n) { return ok(scoreRows().sort(rankSort).slice(0, n)); }
     };
+    function scoreRows(test) {
+      return rows('students', test).map(function (x) {
+        return { id: x.id, name: x.name, group: x.group, cls: (db.groups[x.group] || {}).name || '', points: pointsOf(x.done || {}, x.quiz || {}), done: Object.keys(x.done || {}).length };
+      });
+    }
   }
 
   /* Firebase backend: Auth (email/password) + Firestore. Students sign in as username@mbotsim.example.com. */
@@ -1659,11 +1671,15 @@ window.MBOT_FIREBASE_CONFIG = {
       removeStudent: function (st) {
         var a = acct();
         return a.signInWithEmailAndPassword(st.username + DOMAIN, st.password).then(function (c) { return c.user.delete(); }).catch(noop)
-          .then(function () { return col('students').doc(st.id).delete(); });
+          .then(function () { return col('students').doc(st.id).delete(); })
+          .then(function () { return col('scores').doc(st.id).delete().catch(noop); });
       },
       listAssignments: function (gid) { return rowsOf(gid ? col('assignments').where('groups', 'array-contains', gid) : col('assignments')); },
       saveAssignment: function (id, d) { return put('assignments', id, d); },
-      deleteAssignment: function (id) { return col('assignments').doc(id).delete(); }
+      deleteAssignment: function (id) { return col('assignments').doc(id).delete(); },
+      saveScore: function (uid, d) { return col('scores').doc(uid).set(d); },
+      listScores: function (gid) { return rowsOf(col('scores').where('group', '==', gid)); },
+      topScores: function (n) { return rowsOf(col('scores').orderBy('points', 'desc').limit(n)); }
     };
   }
 
@@ -1725,9 +1741,10 @@ window.MBOT_FIREBASE_CONFIG = {
       customs = r[1].map(toChallenge);
       store = blankStore(); store.name = p.name; store.done = p.done || {}; store.quiz = p.quiz || {}; store.tries = p.tries || {}; store.submitted = p.submitted || {};
       for (var k in (p.programs || {})) { try { store.programs[k] = JSON.parse(p.programs[k]); } catch (e) { } }
-      mode = freshMode(); dirty = false;
+      mode = freshMode(); dirty = false; lastScore = null;
       closeModal(); updateAuthUI(); loadMode(); showWeeks();
       be.updateStudent(p.id, { lastSeen: Date.now() }).catch(noop);
+      syncScore();
     });
   }
   function enterTeacher() {
@@ -1748,6 +1765,7 @@ window.MBOT_FIREBASE_CONFIG = {
     $('btnAuth').hidden = cloud && !user;
     $('btnAuth').textContent = user ? 'Log out' + (user.role === 'student' ? ' (' + String(user.profile.name).split(' ')[0] + ')' : '') : 'Log in (demo)';
     $('btnSend').hidden = !(user && user.role === 'student');
+    $('btnRank').hidden = !(user && user.role === 'student' && (!user.group || user.group.board !== false));
     $('pts').textContent = points();
   }
   function sendToTeacher() {
@@ -1792,8 +1810,8 @@ window.MBOT_FIREBASE_CONFIG = {
   var dash = { tab: 'classes', gid: null, groups: [], students: [], assigns: [], view: null, note: '', arm: '', out: '' };
   function byName(a, b) { return String(a.name).localeCompare(String(b.name), undefined, { numeric: true }); }
   function loadDash() {
-    return Promise.all([be.listGroups(), be.listAssignments()]).then(function (r) {
-      dash.groups = r[0].sort(byName);
+    return Promise.all([be.listGroups(), be.listAssignments(), be.topScores(5).catch(function () { return []; })]).then(function (r) {
+      dash.groups = r[0].sort(byName); dash.top = r[2];
       dash.assigns = r[1].sort(function (a, b) { return (b.created || 0) - (a.created || 0); });
       customs = dash.assigns.map(toChallenge);
       if (!dash.groups.some(function (g) { return g.id === dash.gid; })) dash.gid = dash.groups.length ? dash.groups[0].id : null;
@@ -1849,7 +1867,8 @@ window.MBOT_FIREBASE_CONFIG = {
     var st = dash.students;
     var h = '<div class="week"><h3>' + esc(g.name) + ' <span>' + st.length + ' student' + (st.length === 1 ? '' : 's') + '</span></h3>' +
       '<div class="row"><strong>Unlocked weeks</strong><span>' + weekBtns('gwk', g.id, g.weeks || []) + '</span>' +
-      '<button class="btn small" data-act="delGroup" data-id="' + g.id + '" type="button">' + (dash.arm === 'g' + g.id ? 'Press again to delete' : 'Delete class') + '</button></div></div>';
+      '<button class="btn small" data-act="delGroup" data-id="' + g.id + '" type="button">' + (dash.arm === 'g' + g.id ? 'Press again to delete' : 'Delete class') + '</button>' +
+      '<button class="btn small' + (g.board !== false ? ' on' : '') + '" data-act="board" type="button" aria-pressed="' + (g.board !== false) + '" title="Lets students in this class see the top 5 rankings">Student ranking: ' + (g.board !== false ? 'On' : 'Off') + '</button></div></div>';
     h += '<div class="week"><h3>Students</h3>';
     if (st.length) {
       h += '<div class="tblwrap"><table class="tbl"><thead><tr><th>Name</th><th>Username</th><th>Password</th><th>Points</th><th>Done</th><th>Last seen</th><th>Extra weeks</th><th>Actions</th></tr></thead><tbody>' +
@@ -1868,8 +1887,9 @@ window.MBOT_FIREBASE_CONFIG = {
   }
   function progressHtml() {
     var cs = S.CHALLENGES.concat(customs), st = dash.students.slice().sort(function (a, b) { return ptsOf(b) - ptsOf(a); });
-    if (!st.length) return '<p>No students in this class yet.</p>';
-    return '<p>Sorted by points. A number is the stars earned (1 to 3). A dot means the student tried but has not solved it yet.</p><div class="tblwrap"><table class="tbl grid"><thead><tr><th>Student</th><th>Pts</th>' +
+    var top = boardHtml('Top 5 in all classes', (dash.top || []).slice().sort(rankSort), true);
+    if (!st.length) return top + '<p>No students in this class yet.</p>';
+    return top + '<div class="week"><h3>This class</h3></div><p>Sorted by points. A number is the stars earned (1 to 3). A dot means the student tried but has not solved it yet.</p><div class="tblwrap"><table class="tbl grid"><thead><tr><th>Student</th><th>Pts</th>' +
       cs.map(function (c) { return '<th>' + (c.custom ? 'Task' : 'Week ' + c.week) + '<small>' + esc(c.title) + '</small></th>'; }).join('') + '<th>Quizzes</th></tr></thead><tbody>' +
       st.map(function (s) {
         var d = s.done || {}, t = s.tries || {}, q = s.quiz || {};
@@ -2051,6 +2071,7 @@ window.MBOT_FIREBASE_CONFIG = {
       dash.arm = '';
       be.deleteAssignment(id).then(function () { return reload('Assignment deleted.'); }).catch(dashFail);
     }
+    else if (a === 'board' && g) { g.board = g.board === false; be.saveGroup(g.id, g).then(function () { dash.note = 'Student ranking is now ' + (g.board ? 'on' : 'off') + ' for ' + g.name + '. Students see the change the next time they log in.'; renderDash(); }, dashFail); }
     else if (a === 'addStudents') addStudents();
     else if (a === 'copyLogins' && g) copyOut(loginList(), 'Login list copied. Paste it into Excel or Word to print it.');
     else if (a === 'copyResults' && g) copyOut(resultsTable(), 'Results copied. Paste them into Excel.');
@@ -2060,6 +2081,37 @@ window.MBOT_FIREBASE_CONFIG = {
   $('btnAuth').onclick = function () { if (user) logout(); else showLogin(); };
   $('btnDash').onclick = function () { openDash(); };
   $('btnSend').onclick = sendToTeacher;
+  $('btnRank').onclick = showRanking;
+
+  /* ---------- student ranking: top 5 in the class and in all classes ---------- */
+  var lastScore = null;
+  function rankSort(a, b) { return (b.points || 0) - (a.points || 0) || (b.done || 0) - (a.done || 0) || String(a.name).localeCompare(String(b.name)); }
+  function syncScore() {
+    if (!user || user.role !== 'student' || !be) return Promise.resolve();
+    var pts = points(); if (pts === lastScore) return Promise.resolve();
+    lastScore = pts;
+    return be.saveScore(user.uid, { name: user.profile.name, group: user.profile.group || '', cls: (user.group && user.group.name) || '', points: pts, done: Object.keys(store.done).length, at: Date.now() })
+      .catch(function () { lastScore = null; });
+  }
+  function boardHtml(title, list, showCls) {
+    var h = '<div class="week"><h3>' + esc(title) + '</h3>';
+    if (!list.length) return h + '<p>No points yet. The first student to finish a challenge takes first place.</p></div>';
+    return h + '<div class="tblwrap"><table class="tbl rank"><thead><tr><th>Place</th><th>Student</th>' + (showCls ? '<th>Class</th>' : '') + '<th>Points</th></tr></thead><tbody>' + list.slice(0, 5).map(function (x, i) {
+      return '<tr' + (user && x.id === user.uid ? ' class="me"' : '') + '><td class="num">' + (i + 1) + '</td><td>' + esc(x.name) + (user && x.id === user.uid ? ' (you)' : '') + '</td>' + (showCls ? '<td>' + esc(x.cls || '') + '</td>' : '') + '<td class="num">' + (x.points || 0) + '</td></tr>';
+    }).join('') + '</tbody></table></div></div>';
+  }
+  function showRanking() {
+    if (!user || user.role !== 'student') return;
+    openModal(head('Ranking') + '<p id="rkOut" role="status">Loading the ranking...</p>');
+    push().then(function () { return Promise.all([be.listScores(user.profile.group), be.topScores(5)]); }).then(function (r) {
+      if (!$('rkOut')) return;
+      var cls = r[0].sort(rankSort), all = r[1].sort(rankSort), me = -1;
+      cls.forEach(function (x, i) { if (x.id === user.uid) me = i; });
+      openModal(head('Ranking') + boardHtml('Top 5 in ' + ((user.group && user.group.name) || 'your class'), cls, false) +
+        (me >= 0 ? '<p class="mine">Your place in your class: <strong>' + (me + 1) + ' of ' + cls.length + '</strong>, with ' + (cls[me].points || 0) + ' points.</p>' : '') +
+        boardHtml('Top 5 in all classes', all, true));
+    }).catch(function () { if ($('rkOut')) $('rkOut').textContent = 'The ranking is not available right now. Tell your teacher.'; });
+  }
   document.addEventListener('visibilitychange', function () { if (document.hidden) push(); });
 
   start();
